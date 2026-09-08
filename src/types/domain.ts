@@ -51,3 +51,20 @@ export interface University {
 }
 
 export type WorkflowStageUpdate = Pick<WorkflowStage, 'status' | 'owner' | 'date' | 'note'>
+
+export type TaskPriority = 'low' | 'normal' | 'high'
+export interface TaskInput {
+  universityId: number
+  programId?: number
+  title: string
+  owner: string
+  dueDate: string
+  priority: TaskPriority
+  description: string
+}
+export interface CrmTask extends TaskInput {
+  id: number
+  status: 'open' | 'done'
+  createdAt: string
+}
+export type TaskUpdate = Partial<Omit<TaskInput, 'universityId'>> & { status?: CrmTask['status'] }
