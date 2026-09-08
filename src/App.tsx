@@ -1,3 +1,4 @@
+import './styles.css'
 import { useEffect, useState, type ReactNode } from 'react'
 import { api } from './api'
 import type { UniversityDetails } from './api/client'
