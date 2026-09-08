@@ -4,7 +4,9 @@ import { Icon } from '../components/Icon'
 
 export function UniversitiesPage({ universities, onOpen }: { universities: University[]; onOpen: (id: number) => void }) {
   const [query, setQuery] = useState('')
-  const filtered = useMemo(() => universities.filter((u) => `${u.name} ${u.city} ${u.shortName}`.toLowerCase().includes(query.toLowerCase())), [universities, query])
+  const [status, setStatus] = useState('')
+  const statuses = [...new Set(universities.map(university => university.status))]
+  const filtered = useMemo(() => universities.filter((u) => (!status || u.status === status) && `${u.name} ${u.city} ${u.shortName}`.toLowerCase().includes(query.toLowerCase())), [universities, query, status])
 
   return <div className="content">
     <div className="page-heading">
@@ -13,8 +15,8 @@ export function UniversitiesPage({ universities, onOpen }: { universities: Unive
     </div>
 
     <section className="card universities-toolbar">
-      <div className="list-search"><Icon name="search" size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Поиск по названию, городу или аббревиатуре" /></div>
-      <div className="toolbar-filter">Все статусы <span>⌄</span></div>
+      <div className="list-search"><Icon name="search" size={17} /><input aria-label="Поиск учебного заведения" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Поиск по названию, городу или аббревиатуре" /></div>
+      <select className="toolbar-filter" aria-label="Статус взаимодействия" value={status} onChange={event => setStatus(event.target.value)}><option value="">Все статусы</option>{statuses.map(value => <option key={value} value={value}>{value}</option>)}</select>
     </section>
 
     <section className="card universities-list">
