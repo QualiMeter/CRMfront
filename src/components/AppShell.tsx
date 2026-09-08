@@ -12,6 +12,8 @@ const secondaryItems = [
   { label: 'Документы', icon: 'file' as const, path: '/documents' },
 ]
 
+function breadcrumb(path: string) { const map: Record<string, string> = {'/':'Обзор','/universities':'Вузы','/programs':'Программы','/analytics':'Аналитика','/tasks':'Задачи','/documents':'Документы'}; return path.startsWith('/universities/') ? 'Карточка вуза' : map[path] ?? 'Раздел' }
+
 export function AppShell({ children, path, navigate }: { children: ReactNode; path: string; navigate: (path: string) => void }) {
   const isActive = (itemPath: string) => itemPath === '/' ? path === '/' : path.startsWith(itemPath)
   return <div className="app-shell">
@@ -21,8 +23,8 @@ export function AppShell({ children, path, navigate }: { children: ReactNode; pa
       <nav className="nav-list">{navItems.map((item) => <button key={item.path} className={`nav-item ${isActive(item.path) ? 'active' : ''}`} onClick={() => navigate(item.path)}><Icon name={item.icon} size={19} /><span>{item.label}</span></button>)}</nav>
       <div className="sidebar-label second">УПРАВЛЕНИЕ</div>
       <nav className="nav-list">{secondaryItems.map((item) => <button key={item.path} className={`nav-item ${isActive(item.path) ? 'active' : ''}`} onClick={() => navigate(item.path)}><Icon name={item.icon} size={19} /><span>{item.label}</span>{item.badge && <span className="nav-badge">{item.badge}</span>}</button>)}</nav>
-      <div className="sidebar-bottom"><button className="nav-item"><Icon name="settings" size={19} /><span>Настройки</span></button><div className="user-card"><div className="avatar">АП</div><div className="user-meta"><strong>Алексей Петров</strong><span>Менеджер</span></div><Icon name="more" size={18} /></div></div>
+      <div className="sidebar-bottom"><button className="nav-item disabled-nav" disabled title="Настройки добавим позже"><Icon name="settings" size={19} /><span>Настройки</span></button><div className="user-card"><div className="avatar">АП</div><div className="user-meta"><strong>Алексей Петров</strong><span>Менеджер</span></div><Icon name="more" size={18} /></div></div>
     </aside>
-    <main className="main"><header className="topbar"><div className="breadcrumbs"><span>CRM</span><span>/</span><strong>{path.startsWith('/universities') ? 'Вузы' : path === '/' ? 'Обзор' : 'Раздел'}</strong></div><div className="topbar-actions"><div className="search"><Icon name="search" size={18} /><input placeholder="Поиск..." /></div><button className="icon-button"><Icon name="bell" size={19} /><span className="notification-dot" /></button><div className="top-avatar">АП</div></div></header>{children}</main>
+    <main className="main"><header className="topbar"><div className="breadcrumbs"><span>CRM</span><span>/</span><strong>{breadcrumb(path)}</strong></div><div className="topbar-actions"><div className="search"><Icon name="search" size={18} /><input placeholder="Поиск..." /></div><button className="icon-button"><Icon name="bell" size={19} /><span className="notification-dot" /></button><div className="top-avatar">АП</div></div></header>{children}</main>
   </div>
 }
