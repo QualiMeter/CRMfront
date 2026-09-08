@@ -3,6 +3,8 @@ export type StageStatus = 'done' | 'active' | 'pending' | 'blocked'
 export interface WorkflowStage {
   id: number
   universityId: number
+  programId: number
+  order: number
   title: string
   shortTitle: string
   status: StageStatus
@@ -21,6 +23,7 @@ export interface Program {
   applications: number
   demand: number
   stage: string
+  workflow: WorkflowStage[]
 }
 
 export interface Activity {
@@ -46,3 +49,5 @@ export interface University {
   streams: number
   progress: number
 }
+
+export type WorkflowStageUpdate = Pick<WorkflowStage, 'status' | 'owner' | 'date' | 'note'>

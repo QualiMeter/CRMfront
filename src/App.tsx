@@ -5,44 +5,78 @@ import { AppShell } from './components/AppShell'
 import { UniversitiesPage } from './pages/UniversitiesPage'
 import { UniversityDetailsPage } from './pages/UniversityDetailsPage'
 import { SectionPage } from './pages/SectionPage'
-import type { University } from './types/domain'
-import './styles.css'
+import type { University, WorkflowStageUpdate } from './types/domain'
+
+const currentLocation = () => window.location.pathname + window.location.search
 
 function App() {
-  const [path, setPath] = useState(window.location.pathname)
+  const [location, setLocation] = useState(currentLocation)
   const [universities, setUniversities] = useState<University[]>([])
   const [details, setDetails] = useState<UniversityDetails | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [retry, setRetry] = useState(0)
   const [allPrograms, setAllPrograms] = useState<UniversityDetails['programs']>([])
   const [allActivities, setAllActivities] = useState<UniversityDetails['activities']>([])
+  const url = new URL(location, window.location.origin)
+  const path = url.pathname
+  const programId = url.searchParams.has('program') ? Number(url.searchParams.get('program')) : null
 
   const navigate = (nextPath: string) => {
     window.history.pushState({}, '', nextPath)
-    setPath(nextPath)
+    setLocation(currentLocation())
   }
+  useEffect(() => {
+    const onPopState = () => setLocation(currentLocation())
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    if (path === '/' || path === '/universities') {
-      api.getUniversities().then((data) => { if (!cancelled) setUniversities(data) }).finally(() => { if (!cancelled) setLoading(false) })
-    } else if (path.startsWith('/universities/')) {
-      const id = Number(path.split('/')[2])
-      api.getUniversity(id).then((data) => { if (!cancelled) { setDetails(data); setAllPrograms(data.programs); setAllActivities(data.activities) } }).finally(() => { if (!cancelled) setLoading(false) })
-    } else {
-      Promise.all([api.getUniversities(), ...[1,2,3].map(id => api.getUniversity(id))]).then(([us, ...detailsList]) => {
-        if (!cancelled) { setUniversities(us); setAllPrograms(detailsList.flatMap(d => d.programs)); setAllActivities(detailsList.flatMap(d => d.activities)) }
-      }).finally(() => { if (!cancelled) setLoading(false) })
+    setError('')
+    setDetails(null)
+    async function load() {
+      try {
+        const list = await api.getUniversities()
+        if (cancelled) return
+        setUniversities(list)
+        if (path.startsWith('/universities/')) {
+          const data = await api.getUniversity(Number(path.split('/')[2]))
+          if (!cancelled) setDetails(data)
+        } else if (['/programs', '/analytics', '/tasks', '/documents'].includes(path)) {
+          const detailsList = await Promise.all(list.map(university => api.getUniversity(university.id)))
+          if (!cancelled) {
+            setAllPrograms(detailsList.flatMap(data => data.programs))
+            setAllActivities(detailsList.flatMap(data => data.activities))
+          }
+        }
+      } catch (error) {
+        if (!cancelled) setError(error instanceof Error ? error.message : 'Не удалось загрузить данные')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
+    void load()
     return () => { cancelled = true }
-  }, [path])
+  }, [path, retry])
+
+  async function saveStage(programId: number, stageId: number, update: WorkflowStageUpdate) {
+    if (!details) throw new Error('Откройте карточку вуза заново')
+    const universityId = details.university.id
+    const updated = await api.updateProgramStage(universityId, programId, stageId, update)
+    // A completed save must not replace another university after navigation.
+    setDetails(current => current?.university.id === universityId ? updated : current)
+    setUniversities(current => current.map(university => university.id === universityId ? updated.university : university))
+  }
 
   let content: ReactNode
-  if (loading) content = <div className="content"><div className="loading card">Загрузка данных…</div></div>
-  else if (path === '/universities') content = <UniversitiesPage universities={universities} onOpen={(id) => navigate(`/universities/${id}`)} />
-  else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage data={details} universities={universities} onSwitch={(id) => navigate(`/universities/${id}`)} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
-  else if (path === '/') content = <UniversitiesPage universities={universities} onOpen={(id) => navigate(`/universities/${id}`)} />
-  else if (['/programs','/analytics','/tasks','/documents'].includes(path)) content = <SectionPage section={path.slice(1) as 'programs' | 'analytics' | 'tasks' | 'documents'} programs={allPrograms} activities={allActivities} onOpenUniversity={(id) => navigate(`/universities/${id}`)} />
+  if (loading) content = <div className="content"><div className="loading card" role="status">Загрузка данных…</div></div>
+  else if (error) content = <div className="content"><div className="loading card"><p role="alert">{error}</p><button className="outline-button" onClick={() => setRetry(value => value + 1)}>Повторить загрузку</button></div></div>
+  else if (path === '/' || path === '/universities') content = <UniversitiesPage universities={universities} onOpen={id => navigate(`/universities/${id}`)} />
+  else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
+  else if (['/programs', '/analytics', '/tasks', '/documents'].includes(path)) content = <SectionPage key={path} section={path.slice(1) as 'programs' | 'analytics' | 'tasks' | 'documents'} programs={allPrograms} activities={allActivities} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else content = <div className="content"><div className="loading card">Раздел не найден.</div></div>
 
   return <AppShell path={path} navigate={navigate}>{content}</AppShell>
