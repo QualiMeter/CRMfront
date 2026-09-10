@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { api } from './api'
 import type { UniversityDetails } from './api/client'
 import { AppShell } from './components/AppShell'
+import { OverviewPage } from './pages/OverviewPage'
 import { UniversitiesPage } from './pages/UniversitiesPage'
 import { UniversityDetailsPage } from './pages/UniversityDetailsPage'
 import { TasksPanel } from './components/TasksPanel'
@@ -49,7 +50,7 @@ function App() {
         if (path.startsWith('/universities/')) {
           const data = await api.getUniversity(Number(path.split('/')[2]))
           if (!cancelled) setDetails(data)
-        } else if (['/programs', '/analytics', '/tasks', '/documents'].includes(path)) {
+        } else if (path === '/' || ['/programs', '/analytics', '/tasks', '/documents'].includes(path)) {
           const detailsList = await Promise.all(list.map(university => api.getUniversity(university.id)))
           if (!cancelled) {
             setAllPrograms(detailsList.flatMap(data => data.programs))
@@ -70,7 +71,6 @@ function App() {
     if (!details) throw new Error('Откройте карточку вуза заново')
     const universityId = details.university.id
     const updated = await api.updateProgramStage(universityId, programId, stageId, update)
-    // A completed save must not replace another university after navigation.
     setDetails(current => current?.university.id === universityId ? updated : current)
     setUniversities(current => current.map(university => university.id === universityId ? updated.university : university))
   }
@@ -86,7 +86,8 @@ function App() {
   let content: ReactNode
   if (loading) content = <div className="content"><div className="loading card" role="status">Загрузка данных…</div></div>
   else if (error) content = <div className="content"><div className="loading card"><p role="alert">{error}</p><button className="outline-button" onClick={() => setRetry(value => value + 1)}>Повторить загрузку</button></div></div>
-  else if (path === '/' || path === '/universities') content = <UniversitiesPage universities={universities} onOpen={id => navigate(`/universities/${id}`)} />
+  else if (path === '/') content = <OverviewPage universities={universities} programs={allPrograms} activities={allActivities} tasks={tasks} onOpenUniversity={id => navigate(`/universities/${id}`)} onOpenUniversities={() => navigate('/universities')} onOpenPrograms={() => navigate('/programs')} onOpenTasks={() => navigate('/tasks')} onOpenAnalytics={() => navigate('/analytics')} />
+  else if (path === '/universities') content = <UniversitiesPage universities={universities} onOpen={id => navigate(`/universities/${id}`)} />
   else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onCreateTask={createTask} onUpdateTask={updateTask} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
   else if (path === '/tasks') content = <div className="content"><div className="page-heading"><div><div className="eyebrow">РАБОЧИЙ ЦЕНТР</div><h1>Задачи</h1><p className="muted">Поручения по всем учебным заведениям и программам</p></div></div><TasksPanel tasks={tasks} universities={universities} programs={allPrograms} onCreate={createTask} onUpdate={updateTask} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /></div>
   else if (['/programs', '/analytics', '/documents'].includes(path)) content = <SectionPage key={path} section={path.slice(1) as 'programs' | 'analytics' | 'tasks' | 'documents'} programs={allPrograms} activities={allActivities} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
