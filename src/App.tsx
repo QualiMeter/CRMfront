@@ -1,4 +1,5 @@
 import './styles.css'
+import './interaction.css'
 import { useEffect, useState, type ReactNode } from 'react'
 import { api } from './api'
 import type { UniversityDetails } from './api/client'
@@ -8,7 +9,7 @@ import { UniversitiesPage } from './pages/UniversitiesPage'
 import { UniversityDetailsPage } from './pages/UniversityDetailsPage'
 import { TasksPanel } from './components/TasksPanel'
 import { SectionPage } from './pages/SectionPage'
-import type { CrmTask, TaskInput, TaskUpdate, University, WorkflowStageUpdate } from './types/domain'
+import type { CrmTask, ProgramInput, TaskInput, TaskUpdate, University, UniversityInput, WorkflowStageUpdate } from './types/domain'
 
 const currentLocation = () => window.location.pathname + window.location.search
 
@@ -82,15 +83,27 @@ function App() {
   }
   async function createTask(input: TaskInput) { await refreshTaskViews(await api.createTask(input)) }
   async function updateTask(id: number, update: TaskUpdate) { await refreshTaskViews(await api.updateTask(id, update)) }
+  async function createUniversity(input: UniversityInput) {
+    const created = await api.createUniversity(input)
+    setUniversities(await api.getUniversities())
+    return created.university.id
+  }
+  async function createProgram(input: ProgramInput) {
+    const updated = await api.createProgram(input)
+    setUniversities(await api.getUniversities())
+    setAllPrograms(current => [...current.filter(program => program.universityId !== input.universityId), ...updated.programs])
+    setAllActivities(current => [...updated.activities, ...current.filter(activity => activity.universityId !== input.universityId)])
+    setDetails(current => current?.university.id === updated.university.id ? updated : current)
+  }
 
   let content: ReactNode
   if (loading) content = <div className="content"><div className="loading card" role="status">Загрузка данных…</div></div>
   else if (error) content = <div className="content"><div className="loading card"><p role="alert">{error}</p><button className="outline-button" onClick={() => setRetry(value => value + 1)}>Повторить загрузку</button></div></div>
   else if (path === '/') content = <OverviewPage universities={universities} programs={allPrograms} activities={allActivities} tasks={tasks} onOpenUniversity={id => navigate(`/universities/${id}`)} onOpenUniversities={() => navigate('/universities')} onOpenPrograms={() => navigate('/programs')} onOpenTasks={() => navigate('/tasks')} onOpenAnalytics={() => navigate('/analytics')} />
-  else if (path === '/universities') content = <UniversitiesPage universities={universities} onOpen={id => navigate(`/universities/${id}`)} />
-  else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onCreateTask={createTask} onUpdateTask={updateTask} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
+  else if (path === '/universities') content = <UniversitiesPage universities={universities} initialQuery={url.searchParams.get('search') ?? ''} onCreate={createUniversity} onOpen={id => navigate(`/universities/${id}`)} />
+  else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onCreateTask={createTask} onUpdateTask={updateTask} onOpenPrograms={() => navigate('/programs')} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
   else if (path === '/tasks') content = <div className="content"><div className="page-heading"><div><div className="eyebrow">РАБОЧИЙ ЦЕНТР</div><h1>Задачи</h1><p className="muted">Поручения по всем учебным заведениям и программам</p></div></div><TasksPanel tasks={tasks} universities={universities} programs={allPrograms} onCreate={createTask} onUpdate={updateTask} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /></div>
-  else if (['/programs', '/analytics', '/documents'].includes(path)) content = <SectionPage key={path} section={path.slice(1) as 'programs' | 'analytics' | 'tasks' | 'documents'} programs={allPrograms} activities={allActivities} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
+  else if (['/programs', '/analytics', '/documents'].includes(path)) content = <SectionPage key={path} section={path.slice(1) as 'programs' | 'analytics' | 'tasks' | 'documents'} programs={allPrograms} activities={allActivities} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else content = <div className="content"><div className="loading card">Раздел не найден.</div></div>
 
   return <AppShell taskCount={tasks.filter(task => task.status === 'open').length} path={path} navigate={navigate}>{content}</AppShell>

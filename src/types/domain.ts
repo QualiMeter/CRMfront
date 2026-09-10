@@ -50,6 +50,25 @@ export interface University {
   progress: number
 }
 
+export interface UniversityInput {
+  name: string
+  shortName: string
+  city: string
+  contactPerson: string
+  contactRole: string
+  status: string
+}
+
+export interface ProgramInput {
+  universityId: number
+  name: string
+  product: string
+  students: number
+  streams: number
+  applications: number
+  demand: number
+}
+
 export type WorkflowStageUpdate = Pick<WorkflowStage, 'status' | 'owner' | 'date' | 'note'>
 
 export type TaskPriority = 'low' | 'normal' | 'high'

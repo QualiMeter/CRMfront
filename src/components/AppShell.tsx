@@ -16,10 +16,33 @@ function breadcrumb(path: string) { const map: Record<string, string> = {'/':'О
 
 export function AppShell({ children, path, navigate, taskCount }: { taskCount: number; children: ReactNode; path: string; navigate: (path: string) => void }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [compact, setCompact] = useState(() => localStorage.getItem('crm-density') === 'compact')
+  const [tips, setTips] = useState(() => localStorage.getItem('crm-tips') !== 'off')
+  const [search, setSearch] = useState('')
   const menuButton = useRef<HTMLButtonElement>(null)
-  useEffect(() => { setMenuOpen(false) }, [path])
+  useEffect(() => { setMenuOpen(false); setNotificationsOpen(false) }, [path])
+  useEffect(() => { document.documentElement.dataset.density = compact ? 'compact' : 'comfortable' }, [compact])
+  useEffect(() => { document.documentElement.dataset.tips = tips ? 'on' : 'off' }, [tips])
   function closeMenu() { setMenuOpen(false); menuButton.current?.focus() }
   const isActive = (itemPath: string) => itemPath === '/' ? path === '/' : path.startsWith(itemPath)
+  const submitSearch = () => {
+    const value = search.trim().toLowerCase()
+    if (!value) return
+    if (value.includes('зада')) navigate('/tasks')
+    else if (value.includes('док')) navigate('/documents')
+    else if (value.includes('анал')) navigate('/analytics')
+    else if (value.includes('программ') || value.includes('курс')) navigate('/programs')
+    else if (value.includes('вуз') || value.includes('универ')) navigate('/universities')
+    else navigate(`/universities?search=${encodeURIComponent(search.trim())}`)
+    setSearch('')
+  }
+  const saveSettings = () => {
+    localStorage.setItem('crm-density', compact ? 'compact' : 'comfortable')
+    localStorage.setItem('crm-tips', tips ? 'on' : 'off')
+    setSettingsOpen(false)
+  }
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark">Р</div><div><div className="brand-name">RTK Education</div><div className="brand-subtitle">CRM Platform</div></div></div>
@@ -27,10 +50,12 @@ export function AppShell({ children, path, navigate, taskCount }: { taskCount: n
       <nav className="nav-list" aria-label="Навигация">{navItems.map((item) => <button key={item.path} className={`nav-item ${isActive(item.path) ? 'active' : ''}`} onClick={() => navigate(item.path)}><Icon name={item.icon} size={19} /><span>{item.label}</span></button>)}</nav>
       <div className="sidebar-label second">УПРАВЛЕНИЕ</div>
       <nav className="nav-list" aria-label="Навигация">{secondaryItems.map((item) => <button key={item.path} className={`nav-item ${isActive(item.path) ? 'active' : ''}`} onClick={() => navigate(item.path)}><Icon name={item.icon} size={19} /><span>{item.label}</span>{item.path === '/tasks' && <span className="nav-badge">{taskCount}</span>}</button>)}</nav>
-      <div className="sidebar-bottom"><button className="nav-item disabled-nav" disabled title="Настройки добавим позже"><Icon name="settings" size={19} /><span>Настройки</span></button><div className="user-card"><div className="avatar">АП</div><div className="user-meta"><strong>Алексей Петров</strong><span>Менеджер</span></div><Icon name="more" size={18} /></div></div>
+      <div className="sidebar-bottom"><button className="nav-item" onClick={() => setSettingsOpen(true)}><Icon name="settings" size={19} /><span>Настройки</span></button><div className="user-card"><div className="avatar">АП</div><div className="user-meta"><strong>Алексей Петров</strong><span>Менеджер</span></div><Icon name="more" size={18} /></div></div>
     </aside>
-    <main className="main"><header className="topbar"><div className="topbar-leading"><button ref={menuButton} className="mobile-menu-button" aria-expanded={menuOpen} aria-controls="mobile-navigation" aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'} onClick={() => setMenuOpen(open => !open)}><span aria-hidden="true">{menuOpen ? '×' : '☰'}</span></button><div className="breadcrumbs"><span>CRM</span><span>/</span><strong>{breadcrumb(path)}</strong></div></div><div className="topbar-actions"><div className="search"><Icon name="search" size={18} /><input aria-label="Поиск" placeholder="Поиск..." /></div><button className="icon-button" aria-label="Уведомления"><Icon name="bell" size={19} /><span className="notification-dot" /></button><div className="top-avatar">АП</div></div></header>{menuOpen && <nav id="mobile-navigation" className="mobile-navigation" aria-label="Разделы CRM" onKeyDown={event => { if (event.key === 'Escape') closeMenu() }}>
+    <main className="main"><header className="topbar"><div className="topbar-leading"><button ref={menuButton} className="mobile-menu-button" aria-expanded={menuOpen} aria-controls="mobile-navigation" aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'} onClick={() => setMenuOpen(open => !open)}><span aria-hidden="true">{menuOpen ? '×' : '☰'}</span></button><div className="breadcrumbs"><span>CRM</span><span>/</span><strong>{breadcrumb(path)}</strong></div></div><div className="topbar-actions"><form className="search" onSubmit={event => { event.preventDefault(); submitSearch() }}><Icon name="search" size={18} /><input aria-label="Поиск" value={search} onChange={event => setSearch(event.target.value)} placeholder="Поиск..." /></form><div className="notification-wrap"><button className="icon-button" aria-label="Уведомления" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen(open => !open)}><Icon name="bell" size={19} />{taskCount > 0 && <span className="notification-dot" />}</button>{notificationsOpen && <div className="top-popover"><strong>Уведомления</strong><p>{taskCount ? `Открытых задач: ${taskCount}. Проверьте сроки и ответственных.` : 'Новых уведомлений нет.'}</p><button className="popover-action" onClick={() => navigate('/tasks')}>Перейти к задачам <Icon name="arrow" size={14} /></button></div>}</div><button className="top-avatar top-avatar-button" aria-label="Открыть настройки профиля" onClick={() => setSettingsOpen(true)}>АП</button></div></header>{menuOpen && <nav id="mobile-navigation" className="mobile-navigation" aria-label="Разделы CRM" onKeyDown={event => { if (event.key === 'Escape') closeMenu() }}>
       {[...navItems, ...secondaryItems].map(item => <button key={item.path} aria-current={isActive(item.path) ? 'page' : undefined} className={`nav-item ${isActive(item.path) ? 'active' : ''}`} onClick={() => { closeMenu(); navigate(item.path) }}><Icon name={item.icon} size={20} />{item.label}{item.path === '/tasks' && <span className="nav-badge">{taskCount}</span>}</button>)}
+      <button className="nav-item" onClick={() => { closeMenu(); setSettingsOpen(true) }}><Icon name="settings" size={20} />Настройки</button>
     </nav>}{children}</main>
+    {settingsOpen && <div className="crm-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setSettingsOpen(false) }}><section className="crm-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div className="modal-heading"><div><div className="eyebrow">ПЕРСОНАЛИЗАЦИЯ</div><h2 id="settings-title">Настройки интерфейса</h2></div><button className="modal-close" aria-label="Закрыть" onClick={() => setSettingsOpen(false)}>×</button></div><div className="settings-list"><label><span><strong>Компактный режим</strong><small>Уменьшает вертикальные отступы на рабочих экранах.</small></span><input type="checkbox" checked={compact} onChange={event => setCompact(event.target.checked)} /></label><label><span><strong>Подсказки демо</strong><small>Показывать пояснения о временном хранении mock-данных.</small></span><input type="checkbox" checked={tips} onChange={event => setTips(event.target.checked)} /></label></div><div className="modal-actions"><button className="task-action" onClick={() => setSettingsOpen(false)}>Отмена</button><button className="primary-button" onClick={saveSettings}>Сохранить</button></div></section></div>}
   </div>
 }

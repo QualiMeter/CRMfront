@@ -1,0 +1,50 @@
+/* v8: interactive controls that were previously demo placeholders */
+.notification-wrap { position: relative; }
+.top-popover { position: absolute; z-index: 80; right: 0; top: 43px; width: 280px; padding: 14px; border: 1px solid #eaecf0; border-radius: 10px; background: #fff; box-shadow: 0 18px 45px rgba(16,24,40,.14); }
+.top-popover strong { display: block; color: #101828; font-size: 12px; }
+.top-popover p { margin: 7px 0 12px; color: #667085; font-size: 10px; line-height: 1.5; }
+.popover-action { width: 100%; min-height: 32px; padding: 0 9px; border-radius: 7px; background: #f9fafb; color: #344054; display: flex; align-items: center; justify-content: space-between; font-size: 10px; font-weight: 600; }
+.popover-action:hover { background: #f2f4f7; }
+.top-avatar-button { border: 0; cursor: pointer; }
+.crm-overlay { position: fixed; z-index: 120; inset: 0; padding: 24px; display: grid; place-items: center; background: rgba(16,24,40,.42); backdrop-filter: blur(3px); }
+.crm-modal { width: min(560px, 100%); max-height: min(760px, calc(100vh - 48px)); overflow: auto; border: 0; border-radius: 14px; background: #fff; box-shadow: 0 28px 80px rgba(16,24,40,.25); }
+.modal-heading { min-height: 70px; padding: 17px 20px; border-bottom: 1px solid #eaecf0; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.modal-heading h2 { margin-top: 4px; font-size: 16px; }
+.modal-close { width: 34px; height: 34px; border-radius: 8px; background: #f9fafb; color: #667085; font-size: 22px; line-height: 1; }
+.modal-close:hover { background: #f2f4f7; color: #101828; }
+.modal-form { padding: 18px 20px 20px; }
+.modal-form fieldset { margin: 0; padding: 0; border: 0; display: grid; gap: 13px; }
+.modal-form label { display: grid; gap: 6px; color: #475467; font-size: 10px; font-weight: 600; }
+.modal-form input, .modal-form select { width: 100%; height: 38px; padding: 0 10px; border: 1px solid #d0d5dd; border-radius: 8px; background: #fff; color: #344054; outline: none; font: inherit; font-size: 11px; }
+.modal-form input:focus, .modal-form select:focus { border-color: #f04438; box-shadow: 0 0 0 3px #fee4e2; }
+.modal-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+.modal-actions { padding-top: 15px; display: flex; justify-content: flex-end; gap: 8px; }
+.modal-actions .task-action, .modal-actions .primary-button { min-width: 104px; justify-content: center; }
+.settings-list { padding: 10px 20px 2px; }
+.settings-list label { padding: 13px 0; border-bottom: 1px solid #f2f4f7; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.settings-list label:last-child { border-bottom: 0; }
+.settings-list span { display: grid; gap: 4px; }
+.settings-list strong { color: #344054; font-size: 11px; }
+.settings-list small { color: #98a2b3; font-size: 9px; line-height: 1.4; }
+.settings-list input { width: 18px; height: 18px; accent-color: #f04438; }
+.document-details { margin: 0; padding: 16px 20px 4px; display: grid; gap: 0; }
+.document-details div { padding: 12px 0; border-bottom: 1px solid #f2f4f7; display: flex; justify-content: space-between; gap: 20px; }
+.document-details dt { color: #98a2b3; font-size: 10px; }
+.document-details dd { margin: 0; color: #344054; font-size: 10px; font-weight: 600; text-align: right; }
+.document-modal .modal-actions { padding: 16px 20px 20px; }
+.rank-row-button { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.rank-row-button:hover { background: #fcfcfd; }
+.visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
+html[data-density="compact"] .content { padding-top: 20px; padding-bottom: 28px; }
+html[data-density="compact"] .page-heading { margin-bottom: 16px; }
+html[data-density="compact"] .kpi { min-height: 96px; }
+html[data-density="compact"] td { padding-top: 8px; padding-bottom: 8px; }
+@media (max-width: 760px) {
+  .crm-overlay { padding: 10px; align-items: end; }
+  .crm-modal { max-height: calc(100vh - 20px); border-radius: 14px 14px 10px 10px; }
+  .modal-form-grid { grid-template-columns: 1fr; }
+  .top-popover { position: fixed; left: 12px; right: 12px; top: 62px; width: auto; }
+  .topbar .search { display: none; }
+}
+
+html[data-tips="off"] .demo-note { display: none; }
