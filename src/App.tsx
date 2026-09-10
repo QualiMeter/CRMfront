@@ -9,8 +9,20 @@ import { UniversitiesPage } from './pages/UniversitiesPage'
 import { UniversityDetailsPage } from './pages/UniversityDetailsPage'
 import { TasksPanel } from './components/TasksPanel'
 import { SectionPage } from './pages/SectionPage'
+import { DocumentsPage } from './pages/DocumentsPage'
 import { ProfilePage } from './pages/ProfilePage'
-import type { CrmTask, ProgramInput, TaskInput, TaskUpdate, University, UniversityInput, WorkflowStageUpdate } from './types/domain'
+import type {
+  CrmDocument,
+  CrmTask,
+  DocumentInput,
+  DocumentUpdate,
+  ProgramInput,
+  TaskInput,
+  TaskUpdate,
+  University,
+  UniversityInput,
+  WorkflowStageUpdate,
+} from './types/domain'
 
 const currentLocation = () => window.location.pathname + window.location.search
 
@@ -22,6 +34,7 @@ function App() {
   const [error, setError] = useState('')
   const [retry, setRetry] = useState(0)
   const [tasks, setTasks] = useState<CrmTask[]>([])
+  const [documents, setDocuments] = useState<CrmDocument[]>([])
   const [allPrograms, setAllPrograms] = useState<UniversityDetails['programs']>([])
   const [allActivities, setAllActivities] = useState<UniversityDetails['activities']>([])
   const [settingsSignal, setSettingsSignal] = useState(0)
@@ -46,10 +59,11 @@ function App() {
     setDetails(null)
     async function load() {
       try {
-        const [list, taskList] = await Promise.all([api.getUniversities(), api.getTasks()])
+        const [list, taskList, documentList] = await Promise.all([api.getUniversities(), api.getTasks(), api.getDocuments()])
         if (cancelled) return
         setUniversities(list)
         setTasks(taskList)
+        setDocuments(documentList)
         if (path.startsWith('/universities/')) {
           const data = await api.getUniversity(Number(path.split('/')[2]))
           if (!cancelled) setDetails(data)
@@ -82,9 +96,21 @@ function App() {
     const [taskList, updated] = await Promise.all([api.getTasks(), api.getUniversity(task.universityId)])
     setTasks(taskList)
     setDetails(current => current?.university.id === updated.university.id ? updated : current)
+    setAllActivities(current => [...updated.activities, ...current.filter(activity => activity.universityId !== updated.university.id)])
   }
   async function createTask(input: TaskInput) { await refreshTaskViews(await api.createTask(input)) }
   async function updateTask(id: number, update: TaskUpdate) { await refreshTaskViews(await api.updateTask(id, update)) }
+
+  async function refreshDocumentViews(document: CrmDocument) {
+    const [documentList, updated] = await Promise.all([api.getDocuments(), api.getUniversity(document.universityId)])
+    setDocuments(documentList)
+    setDetails(current => current?.university.id === updated.university.id ? updated : current)
+    setAllActivities(current => [...updated.activities, ...current.filter(activity => activity.universityId !== updated.university.id)])
+  }
+  async function createDocument(input: DocumentInput) { await refreshDocumentViews(await api.createDocument(input)) }
+  async function updateDocument(id: number, update: DocumentUpdate) { await refreshDocumentViews(await api.updateDocument(id, update)) }
+  async function deleteDocument(id: number) { await refreshDocumentViews(await api.deleteDocument(id)) }
+
   async function createUniversity(input: UniversityInput) {
     const created = await api.createUniversity(input)
     setUniversities(await api.getUniversities())
@@ -106,7 +132,8 @@ function App() {
   else if (path === '/universities') content = <UniversitiesPage universities={universities} initialQuery={url.searchParams.get('search') ?? ''} onCreate={createUniversity} onOpen={id => navigate(`/universities/${id}`)} />
   else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onCreateTask={createTask} onUpdateTask={updateTask} onOpenPrograms={() => navigate('/programs')} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
   else if (path === '/tasks') content = <div className="content"><div className="page-heading"><div><div className="eyebrow">РАБОЧИЙ ЦЕНТР</div><h1>Задачи</h1><p className="muted">Поручения по всем учебным заведениям и программам</p></div></div><TasksPanel tasks={tasks} universities={universities} programs={allPrograms} onCreate={createTask} onUpdate={updateTask} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /></div>
-  else if (['/programs', '/analytics', '/documents'].includes(path)) content = <SectionPage key={path} section={path.slice(1) as 'programs' | 'analytics' | 'tasks' | 'documents'} programs={allPrograms} activities={allActivities} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
+  else if (path === '/documents') content = <DocumentsPage documents={documents} programs={allPrograms} universities={universities} onCreate={createDocument} onUpdate={updateDocument} onDelete={deleteDocument} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
+  else if (['/programs', '/analytics'].includes(path)) content = <SectionPage key={path} section={path.slice(1) as 'programs' | 'analytics'} programs={allPrograms} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else content = <div className="content"><div className="loading card">Раздел не найден.</div></div>
 
   return <AppShell settingsSignal={settingsSignal} taskCount={tasks.filter(task => task.status === 'open').length} path={path} navigate={navigate}>{content}</AppShell>

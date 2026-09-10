@@ -1,5 +1,17 @@
 import type { ApiClient, UniversityDetails } from '../api/client'
-import type { CrmTask, Program, ProgramInput, TaskInput, University, UniversityInput, WorkflowStage, WorkflowStageUpdate } from '../types/domain'
+import type {
+  CrmDocument,
+  CrmTask,
+  DocumentInput,
+  DocumentUpdate,
+  Program,
+  ProgramInput,
+  TaskInput,
+  University,
+  UniversityInput,
+  WorkflowStage,
+  WorkflowStageUpdate,
+} from '../types/domain'
 import { activities, programs, universities } from '../data/mockData'
 import { stageStatusLabels, workflowLabel, workflowProgress } from '../domain/workflow'
 
@@ -11,6 +23,14 @@ const workflowTemplate = [
   ['Актуализация учебной программы', 'Программа'], ['Ведение занятий', 'Занятия'], ['Актуализация документации', 'Документация'],
   ['Повышение квалификации', 'Повышение'], ['Контроль исполнения', 'Контроль'],
 ] as const
+
+const documents: CrmDocument[] = [
+  { id: 1, universityId: 1, programId: 1, name: 'Договор о сотрудничестве.pdf', category: 'agreement', owner: 'Петров А.А.', status: 'approved', size: '1,8 МБ', mimeType: 'application/pdf', note: 'Подписанная версия договора.', version: 3, uploadedAt: '2026-09-01T09:10:00Z', updatedAt: '2026-09-08T13:15:00Z' },
+  { id: 2, universityId: 1, programId: 3, name: 'Учебная программа — DevOps.docx', category: 'program', owner: 'Иванов И.С.', status: 'review', size: '740 КБ', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', note: 'Ожидаем правки кафедры по модулю контейнеризации.', version: 2, uploadedAt: '2026-09-04T10:00:00Z', updatedAt: '2026-09-09T08:30:00Z' },
+  { id: 3, universityId: 2, programId: 6, name: 'Лицензия РТК Security.pdf', category: 'license', owner: 'Соколова М.А.', status: 'approved', size: '2,1 МБ', mimeType: 'application/pdf', note: '', version: 1, uploadedAt: '2026-09-05T12:00:00Z', updatedAt: '2026-09-05T12:00:00Z' },
+  { id: 4, universityId: 3, programId: 7, name: 'Методические материалы.zip', category: 'methodology', owner: 'Кузнецов А.И.', status: 'draft', size: '18,4 МБ', mimeType: 'application/zip', note: 'Черновой комплект материалов для преподавателей.', version: 1, uploadedAt: '2026-09-08T11:00:00Z', updatedAt: '2026-09-08T11:00:00Z' },
+  { id: 5, universityId: 4, programId: 8, name: 'Протокол встречи.pdf', category: 'protocol', owner: 'Волкова Е.О.', status: 'rejected', size: '620 КБ', mimeType: 'application/pdf', note: 'Нужно добавить список договорённостей и ответственных.', version: 1, uploadedAt: '2026-09-08T07:40:00Z', updatedAt: '2026-09-09T09:20:00Z' },
+]
 
 function universitySummary(university: University): University {
   const related = programs.filter(program => program.universityId === university.id)
@@ -30,6 +50,7 @@ function details(id: number): UniversityDetails {
   return structuredClone({
     university: universitySummary(university),
     tasks: tasks.filter(task => task.universityId === id),
+    documents: documents.filter(document => document.universityId === id),
     programs: programs.filter(program => program.universityId === id).map(program => ({ ...program, stage: workflowLabel(program.workflow) })),
     activities: activities.filter(activity => activity.universityId === id),
   })
@@ -88,6 +109,22 @@ function validateProgram(input: ProgramInput) {
   if (!Number.isFinite(input.demand) || input.demand < 0 || input.demand > 100) throw new Error('Востребованность должна быть от 0 до 100')
 }
 
+function validateDocument(input: DocumentInput) {
+  if (!universities.some(university => university.id === input.universityId)) throw new Error('Выберите вуз')
+  if (input.programId !== undefined && !programs.some(program => program.id === input.programId && program.universityId === input.universityId)) throw new Error('Программа не относится к выбранному вузу')
+  if (!input.name.trim() || input.name.trim().length > 240) throw new Error('Выберите файл с корректным названием')
+  if (!input.owner.trim() || input.owner.trim().length > 120) throw new Error('Укажите ответственного')
+  if (!['draft', 'review', 'approved', 'rejected'].includes(input.status)) throw new Error('Неизвестный статус документа')
+  if (!['agreement', 'program', 'license', 'methodology', 'protocol', 'other'].includes(input.category)) throw new Error('Неизвестная категория документа')
+  if (input.note.length > 2000) throw new Error('Комментарий: не более 2000 символов')
+}
+
+function validateDocumentUpdate(document: CrmDocument, update: DocumentUpdate) {
+  const next: DocumentInput = { ...document, ...update }
+  validateDocument(next)
+  if (update.version !== undefined && (!Number.isInteger(update.version) || update.version < document.version)) throw new Error('Версия документа не может уменьшаться')
+}
+
 function taskActivity(task: CrmTask, title: string) { addActivity(task.universityId, title, task.title, task.status === 'done' ? 'success' : 'info') }
 
 export const mockApi: ApiClient = {
@@ -109,6 +146,56 @@ export const mockApi: ApiClient = {
     taskActivity(task, task.status === previous.status ? 'Обновлена задача' : task.status === 'done' ? 'Задача выполнена' : 'Задача возвращена в работу')
     return structuredClone(task)
   },
+
+  async getDocuments() { await delay(); return structuredClone(documents) },
+  async createDocument(input) {
+    await delay(); validateDocument(input)
+    const now = new Date().toISOString()
+    const document: CrmDocument = {
+      ...input,
+      name: input.name.trim(),
+      owner: input.owner.trim(),
+      note: input.note.trim(),
+      id: Math.max(0, ...documents.map(item => item.id)) + 1,
+      version: 1,
+      uploadedAt: now,
+      updatedAt: now,
+    }
+    documents.unshift(document)
+    addActivity(document.universityId, 'Загружен документ', `${document.name} · версия ${document.version}`, document.status === 'approved' ? 'success' : 'info')
+    return structuredClone(document)
+  },
+  async updateDocument(id, update) {
+    await delay()
+    const index = documents.findIndex(document => document.id === id)
+    if (index < 0) throw new Error('Документ не найден')
+    const previous = documents[index]
+    validateDocumentUpdate(previous, update)
+    const document: CrmDocument = {
+      ...previous,
+      ...update,
+      id: previous.id,
+      universityId: previous.universityId,
+      name: previous.name,
+      uploadedAt: previous.uploadedAt,
+      owner: (update.owner ?? previous.owner).trim(),
+      note: (update.note ?? previous.note).trim(),
+      updatedAt: new Date().toISOString(),
+    }
+    documents[index] = document
+    const title = document.version > previous.version ? 'Добавлена версия документа' : document.status !== previous.status ? 'Изменён статус документа' : 'Обновлён документ'
+    addActivity(document.universityId, title, `${document.name} · версия ${document.version}`, document.status === 'approved' ? 'success' : document.status === 'rejected' ? 'warning' : 'info')
+    return structuredClone(document)
+  },
+  async deleteDocument(id) {
+    await delay()
+    const index = documents.findIndex(document => document.id === id)
+    if (index < 0) throw new Error('Документ не найден')
+    const [document] = documents.splice(index, 1)
+    addActivity(document.universityId, 'Удалён документ', document.name, 'warning')
+    return structuredClone(document)
+  },
+
   async createUniversity(input) {
     await delay(); validateUniversity(input)
     const id = Math.max(0, ...universities.map(university => university.id)) + 1

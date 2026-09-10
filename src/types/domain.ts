@@ -69,6 +69,30 @@ export interface ProgramInput {
   demand: number
 }
 
+export type DocumentStatus = 'draft' | 'review' | 'approved' | 'rejected'
+export type DocumentCategory = 'agreement' | 'program' | 'license' | 'methodology' | 'protocol' | 'other'
+
+export interface DocumentInput {
+  universityId: number
+  programId?: number
+  name: string
+  category: DocumentCategory
+  owner: string
+  status: DocumentStatus
+  size: string
+  mimeType: string
+  note: string
+}
+
+export interface CrmDocument extends DocumentInput {
+  id: number
+  version: number
+  uploadedAt: string
+  updatedAt: string
+}
+
+export type DocumentUpdate = Partial<Pick<CrmDocument, 'programId' | 'category' | 'owner' | 'status' | 'note' | 'version'>>
+
 export type WorkflowStageUpdate = Pick<WorkflowStage, 'status' | 'owner' | 'date' | 'note'>
 
 export type TaskPriority = 'low' | 'normal' | 'high'
