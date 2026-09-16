@@ -12,6 +12,7 @@ import { SectionPage } from './pages/SectionPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { DocumentsPage } from './pages/DocumentsPage'
 import { ProfilePage } from './pages/ProfilePage'
+import { ReportsPage } from './pages/ReportsPage'
 import type {
   CrmDocument,
   CrmTask,
@@ -68,7 +69,7 @@ function App() {
         if (path.startsWith('/universities/')) {
           const data = await api.getUniversity(Number(path.split('/')[2]))
           if (!cancelled) setDetails(data)
-        } else if (path === '/' || ['/programs', '/analytics', '/tasks', '/documents'].includes(path)) {
+        } else if (path === '/' || ['/programs', '/analytics', '/reports', '/tasks', '/documents'].includes(path)) {
           const detailsList = await Promise.all(list.map(university => api.getUniversity(university.id)))
           if (!cancelled) {
             setAllPrograms(detailsList.flatMap(data => data.programs))
@@ -135,6 +136,7 @@ function App() {
   else if (path === '/tasks') content = <div className="content"><div className="page-heading"><div><div className="eyebrow">РАБОЧИЙ ЦЕНТР</div><h1>Задачи</h1><p className="muted">Поручения по всем учебным заведениям и программам</p></div></div><TasksPanel tasks={tasks} universities={universities} programs={allPrograms} onCreate={createTask} onUpdate={updateTask} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /></div>
   else if (path === '/documents') content = <DocumentsPage documents={documents} programs={allPrograms} universities={universities} onCreate={createDocument} onUpdate={updateDocument} onDelete={deleteDocument} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/analytics') content = <AnalyticsPage universities={universities} programs={allPrograms} tasks={tasks} documents={documents} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} onOpenTasks={() => navigate('/tasks')} onOpenDocuments={() => navigate('/documents')} />
+  else if (path === '/reports') content = <ReportsPage universities={universities} programs={allPrograms} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/programs') content = <SectionPage section="programs" programs={allPrograms} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else content = <div className="content"><div className="loading card">Раздел не найден.</div></div>
 

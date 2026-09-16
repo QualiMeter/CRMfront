@@ -10,12 +10,15 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
+    "fflate": "^0.8.3",
+    "pdfmake": "^0.2.20",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "typescript": "latest",
+    "vite": "latest"
   },
   "devDependencies": {
+    "@types/pdfmake": "^0.3.3",
     "@types/react": "latest",
     "@types/react-dom": "latest"
   }
