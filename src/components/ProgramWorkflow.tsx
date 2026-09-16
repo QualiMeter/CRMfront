@@ -11,6 +11,7 @@ export function ProgramWorkflow({ program, onSave, onUpload, onDeleteAttachment 
 }) {
   const [selectedId, setSelectedId] = useState(currentStage(program.workflow)?.id)
   const [saving, setSaving] = useState(false)
+  const statusLabels = { ...stageStatusLabels, ...program.statusLabels }
   const selected = program.workflow.find(stage => stage.id === selectedId) ?? currentStage(program.workflow)
   const done = program.workflow.filter(stage => stage.status === 'done').length
   if (!selected) return <section className="card empty-state">У программы пока нет этапов.</section>
@@ -19,13 +20,13 @@ export function ProgramWorkflow({ program, onSave, onUpload, onDeleteAttachment 
     <section className="card workflow-card">
       <div className="card-header"><div><h2>Этапы программы</h2><p>{program.name} · {program.product}</p></div><span className="workflow-count">{done} из {program.workflow.length} выполнено</span></div>
       <div className="workflow-progress"><progress aria-label="Прогресс программы" max={100} value={workflowProgress(program.workflow)} /><strong>{workflowProgress(program.workflow)}%</strong></div>
-      <label className="mobile-stage-picker">Выбрать этап<select disabled={saving} value={selected.id} onChange={event => setSelectedId(Number(event.target.value))}>{program.workflow.map(stage => <option key={stage.id} value={stage.id}>{stage.order}. {stage.title} — {stageStatusLabels[stage.status]}</option>)}</select></label>
-      <div className="workflow">{program.workflow.map(stage => <button key={stage.id} disabled={saving} aria-pressed={selected.id === stage.id} aria-label={`${stage.order}. ${stage.title}: ${stageStatusLabels[stage.status]}`} className={`stage ${stage.status} ${selected.id === stage.id ? 'selected' : ''}`} onClick={() => setSelectedId(stage.id)}>
+      <label className="mobile-stage-picker">Выбрать этап<select disabled={saving} value={selected.id} onChange={event => setSelectedId(Number(event.target.value))}>{program.workflow.map(stage => <option key={stage.id} value={stage.id}>{stage.order}. {stage.title} — {statusLabels[stage.status]}</option>)}</select></label>
+      <div className="workflow">{program.workflow.map(stage => <button key={stage.id} disabled={saving} aria-pressed={selected.id === stage.id} aria-label={`${stage.order}. ${stage.title}: ${statusLabels[stage.status]}`} className={`stage ${stage.status} ${selected.id === stage.id ? 'selected' : ''}`} onClick={() => setSelectedId(stage.id)}>
         <span className="stage-marker">{stage.status === 'done' ? <Icon name="check" size={16} /> : stage.order}</span>
-        <span className="stage-copy"><strong>{stage.shortTitle}</strong><span>{stageStatusLabels[stage.status]}</span></span>
+        <span className="stage-copy"><strong>{stage.shortTitle}</strong><span>{statusLabels[stage.status]}</span></span>
       </button>)}</div>
     </section>
-    <StageEditor key={selected.id} stage={selected} onUpload={file => onUpload(selected.id, file)} onDeleteAttachment={attachmentId => onDeleteAttachment(selected.id, attachmentId)} onSave={async update => {
+    <StageEditor key={selected.id} stage={selected} statusLabels={statusLabels} onUpload={file => onUpload(selected.id, file)} onDeleteAttachment={attachmentId => onDeleteAttachment(selected.id, attachmentId)} onSave={async update => {
       setSaving(true)
       try { await onSave(selected.id, update) } finally { setSaving(false) }
     }} />
@@ -38,8 +39,9 @@ function formatFileSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} МБ`
 }
 
-function StageEditor({ stage, onSave, onUpload, onDeleteAttachment }: {
+function StageEditor({ stage, statusLabels, onSave, onUpload, onDeleteAttachment }: {
   stage: WorkflowStage
+  statusLabels: Record<WorkflowStage['status'], string>
   onSave: (update: WorkflowStageUpdate) => Promise<void>
   onUpload: (file: File) => Promise<void>
   onDeleteAttachment: (attachmentId: number) => Promise<void>
@@ -88,7 +90,7 @@ function StageEditor({ stage, onSave, onUpload, onDeleteAttachment }: {
     <div className="card-header"><div><span className="detail-kicker">ЭТАП {stage.order}</span><h2>{stage.title}</h2></div></div>
     <form className="stage-form" onSubmit={submit}>
       <fieldset disabled={saving}>
-        <label>Статус<select value={draft.status} onChange={event => change({ status: event.target.value as WorkflowStage['status'] })}>{Object.entries(stageStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <label>Статус<select value={draft.status} onChange={event => change({ status: event.target.value as WorkflowStage['status'] })}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label>Ответственный<input maxLength={120} value={draft.owner} onChange={event => change({ owner: event.target.value })} placeholder="Фамилия и инициалы" /></label>
         <label>Дата начала<input type="date" value={draft.date} onChange={event => change({ date: event.target.value })} /></label>
         <label>Комментарий<textarea maxLength={2000} rows={3} value={draft.note} onChange={event => change({ note: event.target.value })} placeholder="Результат этапа или следующий шаг" /></label>

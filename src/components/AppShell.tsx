@@ -11,12 +11,13 @@ const navItems = [
 const secondaryItems = [
   { label: 'Отчеты', icon: 'file' as const, path: '/reports' },
   { label: 'Импорт', icon: 'plus' as const, path: '/import' },
+  { label: 'Процессы', icon: 'grid' as const, path: '/workflows' },
   { label: 'Задачи', icon: 'check' as const, path: '/tasks' },
   { label: 'Документы', icon: 'file' as const, path: '/documents' },
 ]
 
 function breadcrumb(path: string) {
-  const map: Record<string, string> = {'/':'Обзор','/profile':'Мой профиль','/universities':'Вузы','/programs':'Программы','/analytics':'Аналитика','/reports':'Отчеты','/import':'Импорт','/tasks':'Задачи','/documents':'Документы'}
+  const map: Record<string, string> = {'/':'Обзор','/profile':'Мой профиль','/universities':'Вузы','/programs':'Программы','/analytics':'Аналитика','/reports':'Отчеты','/import':'Импорт','/workflows':'Процессы','/tasks':'Задачи','/documents':'Документы'}
   return path.startsWith('/universities/') ? 'Карточка вуза' : map[path] ?? 'Раздел'
 }
 
@@ -61,6 +62,7 @@ export function AppShell({ children, path, navigate, taskCount, settingsSignal =
     else if (value.includes('анал')) navigate('/analytics')
     else if (value.includes('отч')) navigate('/reports')
     else if (value.includes('импорт') || value.includes('excel')) navigate('/import')
+    else if (value.includes('процесс') || value.includes('workflow')) navigate('/workflows')
     else if (value.includes('программ') || value.includes('курс')) navigate('/programs')
     else if (value.includes('профил') || value.includes('аккаунт')) navigate('/profile')
     else if (value.includes('вуз') || value.includes('универ')) navigate('/universities')

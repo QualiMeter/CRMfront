@@ -11,6 +11,8 @@ import type {
   UniversityInput,
   WorkflowStage,
   WorkflowStageUpdate,
+  WorkflowTemplate,
+  WorkflowTemplateInput,
 } from '../types/domain'
 import { activities, programs, universities } from '../data/mockData'
 import { stageStatusLabels, workflowLabel, workflowProgress } from '../domain/workflow'
@@ -24,6 +26,30 @@ const workflowTemplate = [
   ['Актуализация учебной программы', 'Программа'], ['Ведение занятий', 'Занятия'], ['Актуализация документации', 'Документация'],
   ['Повышение квалификации', 'Повышение'], ['Контроль исполнения', 'Контроль'],
 ] as const
+
+const workflowTemplates: WorkflowTemplate[] = [
+  {
+    id: 1,
+    name: 'Базовый процесс взаимодействия',
+    description: 'Системный шаблон из 14 этапов, предусмотренных техническим заданием.',
+    isSystem: true,
+    updatedAt: '2026-09-15T12:00:00Z',
+    stages: workflowTemplate.map(([title, shortTitle], index) => ({ id: 1000 + index + 1, order: index + 1, title, shortTitle })),
+    statusLabels: { done: 'Выполнено', active: 'В процессе', pending: 'Предстоит', blocked: 'Требует внимания' },
+  },
+  {
+    id: 2,
+    name: 'Пилотное внедрение',
+    description: 'Сокращённый пользовательский процесс для запуска пилота.',
+    isSystem: false,
+    updatedAt: '2026-09-15T15:30:00Z',
+    stages: [
+      ['Первичный контакт', 'Контакт'], ['Диагностика потребности', 'Диагностика'], ['Согласование пилота', 'Согласование'],
+      ['Развёртывание продукта', 'Внедрение'], ['Обучение команды', 'Обучение'], ['Оценка результата', 'Результат'],
+    ].map(([title, shortTitle], index) => ({ id: 2000 + index + 1, order: index + 1, title, shortTitle })),
+    statusLabels: { done: 'Завершено', active: 'В работе', pending: 'Запланировано', blocked: 'Есть препятствие' },
+  },
+]
 
 const documents: CrmDocument[] = [
   { id: 1, universityId: 1, programId: 1, name: 'Договор о сотрудничестве.pdf', category: 'agreement', owner: 'Петров А.А.', status: 'approved', size: '1,8 МБ', mimeType: 'application/pdf', note: 'Подписанная версия договора.', version: 3, uploadedAt: '2026-09-01T09:10:00Z', updatedAt: '2026-09-08T13:15:00Z' },
@@ -84,6 +110,30 @@ function findStage(universityId: number, programId: number, stageId: number) {
   return { program, stage }
 }
 
+function validateWorkflowTemplate(input: WorkflowTemplateInput) {
+  if (!input.name.trim() || input.name.trim().length > 120) throw new Error('Название шаблона: от 1 до 120 символов')
+  if (input.description.trim().length > 500) throw new Error('Описание: не более 500 символов')
+  if (!input.stages.length) throw new Error('Добавьте хотя бы один этап')
+  if (input.stages.length > 30) throw new Error('В одном процессе может быть не более 30 этапов')
+  input.stages.forEach((stage, index) => {
+    if (!stage.title.trim() || stage.title.trim().length > 160) throw new Error(`Этап ${index + 1}: укажите название до 160 символов`)
+    if (!stage.shortTitle.trim() || stage.shortTitle.trim().length > 50) throw new Error(`Этап ${index + 1}: укажите короткое название до 50 символов`)
+  })
+  Object.values(input.statusLabels).forEach(label => { if (!label.trim() || label.trim().length > 40) throw new Error('Название статуса: от 1 до 40 символов') })
+}
+
+function templateFromInput(id: number, input: WorkflowTemplateInput, previous?: WorkflowTemplate): WorkflowTemplate {
+  return {
+    id,
+    name: input.name.trim(),
+    description: input.description.trim(),
+    isSystem: false,
+    updatedAt: new Date().toISOString(),
+    stages: input.stages.map((stage, index) => ({ id: previous?.stages[index]?.id ?? id * 1000 + index + 1, order: index + 1, title: stage.title.trim(), shortTitle: stage.shortTitle.trim() })),
+    statusLabels: Object.fromEntries(Object.entries(input.statusLabels).map(([key, label]) => [key, label.trim()])) as WorkflowTemplate['statusLabels'],
+  }
+}
+
 const tasks: CrmTask[] = [
   { id: 1, universityId: 1, programId: 1, title: 'Согласовать дату обучения преподавателей', owner: 'Петров А.А.', dueDate: '2026-09-15', priority: 'high', description: 'Уточнить состав группы и формат обучения.', status: 'open', createdAt: '2026-09-08T09:00:00Z' },
   { id: 2, universityId: 1, programId: 2, title: 'Проверить пакет документов', owner: 'Иванов И.С.', dueDate: '2026-09-07', priority: 'normal', description: 'Проверить комплект перед подписанием.', status: 'open', createdAt: '2026-09-06T09:00:00Z' },
@@ -138,6 +188,41 @@ function validateDocumentUpdate(document: CrmDocument, update: DocumentUpdate) {
 function taskActivity(task: CrmTask, title: string) { addActivity(task.universityId, title, task.title, task.status === 'done' ? 'success' : 'info') }
 
 export const mockApi: ApiClient = {
+  async getWorkflowTemplates() { await delay(); return structuredClone(workflowTemplates) },
+  async createWorkflowTemplate(input) {
+    await delay(); validateWorkflowTemplate(input)
+    const template = templateFromInput(Math.max(0, ...workflowTemplates.map(item => item.id)) + 1, input)
+    workflowTemplates.push(template)
+    return structuredClone(template)
+  },
+  async updateWorkflowTemplate(id, input) {
+    await delay(); validateWorkflowTemplate(input)
+    const index = workflowTemplates.findIndex(item => item.id === id)
+    if (index < 0) throw new Error('Шаблон не найден')
+    if (workflowTemplates[index].isSystem) throw new Error('Системный шаблон нельзя изменять. Создайте его копию.')
+    workflowTemplates[index] = templateFromInput(id, input, workflowTemplates[index])
+    return structuredClone(workflowTemplates[index])
+  },
+  async deleteWorkflowTemplate(id) {
+    await delay()
+    const index = workflowTemplates.findIndex(item => item.id === id)
+    if (index < 0) throw new Error('Шаблон не найден')
+    if (workflowTemplates[index].isSystem) throw new Error('Системный шаблон нельзя удалить')
+    const [removed] = workflowTemplates.splice(index, 1)
+    return structuredClone(removed)
+  },
+  async applyWorkflowTemplate(universityId, programId, templateId) {
+    await delay()
+    const program = programs.find(item => item.id === programId && item.universityId === universityId)
+    const template = workflowTemplates.find(item => item.id === templateId)
+    if (!program) throw new Error('Программа не найдена')
+    if (!template) throw new Error('Шаблон не найден')
+    program.workflow.forEach(stage => stage.attachments?.forEach(attachment => URL.revokeObjectURL(attachment.url)))
+    program.workflow = template.stages.map((stage, index) => ({ id: program.id * 10000 + Date.now() % 1000 + index, universityId, programId, order: index + 1, title: stage.title, shortTitle: stage.shortTitle, status: index === 0 ? 'active' : 'pending', ...(index === 0 ? { date: new Date().toISOString().slice(0, 10), note: `Применён шаблон «${template.name}».` } : {}) }))
+    program.statusLabels = { ...template.statusLabels }
+    addActivity(universityId, 'Изменён бизнес-процесс', `${program.name} · применён шаблон «${template.name}»`, 'warning')
+    return details(universityId)
+  },
   async getTasks() { await delay(); return structuredClone(tasks) },
   async createTask(input) {
     await delay(); validateTask(input)

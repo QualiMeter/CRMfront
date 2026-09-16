@@ -14,6 +14,7 @@ import { DocumentsPage } from './pages/DocumentsPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ReportsPage } from './pages/ReportsPage'
 import { ImportPage } from './pages/ImportPage'
+import { WorkflowsPage } from './pages/WorkflowsPage'
 import type {
   CrmDocument,
   CrmTask,
@@ -25,6 +26,8 @@ import type {
   University,
   UniversityInput,
   WorkflowStageUpdate,
+  WorkflowTemplate,
+  WorkflowTemplateInput,
 } from './types/domain'
 
 const currentLocation = () => window.location.pathname + window.location.search
@@ -41,6 +44,7 @@ function App() {
   const [allPrograms, setAllPrograms] = useState<UniversityDetails['programs']>([])
   const [allActivities, setAllActivities] = useState<UniversityDetails['activities']>([])
   const [settingsSignal, setSettingsSignal] = useState(0)
+  const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([])
   const url = new URL(location, window.location.origin)
   const path = url.pathname
   const programId = url.searchParams.has('program') ? Number(url.searchParams.get('program')) : null
@@ -62,15 +66,16 @@ function App() {
     setDetails(null)
     async function load() {
       try {
-        const [list, taskList, documentList] = await Promise.all([api.getUniversities(), api.getTasks(), api.getDocuments()])
+        const [list, taskList, documentList, templates] = await Promise.all([api.getUniversities(), api.getTasks(), api.getDocuments(), api.getWorkflowTemplates()])
         if (cancelled) return
         setUniversities(list)
         setTasks(taskList)
         setDocuments(documentList)
+        setWorkflowTemplates(templates)
         if (path.startsWith('/universities/')) {
           const data = await api.getUniversity(Number(path.split('/')[2]))
           if (!cancelled) setDetails(data)
-        } else if (path === '/' || ['/programs', '/analytics', '/reports', '/import', '/tasks', '/documents'].includes(path)) {
+        } else if (path === '/' || ['/programs', '/analytics', '/reports', '/import', '/workflows', '/tasks', '/documents'].includes(path)) {
           const detailsList = await Promise.all(list.map(university => api.getUniversity(university.id)))
           if (!cancelled) {
             setAllPrograms(detailsList.flatMap(data => data.programs))
@@ -154,6 +159,25 @@ function App() {
     setUniversities(list); setAllPrograms(detailsList.flatMap(data => data.programs)); setAllActivities(detailsList.flatMap(data => data.activities))
     return count
   }
+  async function createWorkflowTemplate(input: WorkflowTemplateInput) {
+    const created = await api.createWorkflowTemplate(input)
+    setWorkflowTemplates(await api.getWorkflowTemplates())
+    return created.id
+  }
+  async function updateWorkflowTemplate(id: number, input: WorkflowTemplateInput) {
+    await api.updateWorkflowTemplate(id, input)
+    setWorkflowTemplates(await api.getWorkflowTemplates())
+  }
+  async function deleteWorkflowTemplate(id: number) {
+    await api.deleteWorkflowTemplate(id)
+    setWorkflowTemplates(await api.getWorkflowTemplates())
+  }
+  async function applyWorkflowTemplate(universityId: number, programId: number, templateId: number) {
+    const updated = await api.applyWorkflowTemplate(universityId, programId, templateId)
+    setUniversities(await api.getUniversities())
+    setAllPrograms(current => [...current.filter(program => program.universityId !== universityId), ...updated.programs])
+    setAllActivities(current => [...updated.activities, ...current.filter(activity => activity.universityId !== universityId)])
+  }
 
   let content: ReactNode
   if (loading) content = <div className="content"><div className="loading card" role="status">Загрузка данных…</div></div>
@@ -167,6 +191,7 @@ function App() {
   else if (path === '/analytics') content = <AnalyticsPage universities={universities} programs={allPrograms} tasks={tasks} documents={documents} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} onOpenTasks={() => navigate('/tasks')} onOpenDocuments={() => navigate('/documents')} />
   else if (path === '/reports') content = <ReportsPage universities={universities} programs={allPrograms} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/import') content = <ImportPage universities={universities} onImportUniversities={importUniversities} onImportPrograms={importPrograms} />
+  else if (path === '/workflows') content = <WorkflowsPage templates={workflowTemplates} universities={universities} programs={allPrograms} onCreate={createWorkflowTemplate} onUpdate={updateWorkflowTemplate} onDelete={deleteWorkflowTemplate} onApply={applyWorkflowTemplate} />
   else if (path === '/programs') content = <SectionPage section="programs" programs={allPrograms} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else content = <div className="content"><div className="loading card">Раздел не найден.</div></div>
 

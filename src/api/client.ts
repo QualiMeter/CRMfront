@@ -11,6 +11,8 @@ import type {
   University,
   UniversityInput,
   WorkflowStageUpdate,
+  WorkflowTemplate,
+  WorkflowTemplateInput,
 } from '../types/domain'
 
 export interface UniversityDetails {
@@ -36,6 +38,11 @@ export interface ApiClient {
   updateProgramStage(universityId: number, programId: number, stageId: number, update: WorkflowStageUpdate): Promise<UniversityDetails>
   uploadStageAttachment(universityId: number, programId: number, stageId: number, file: File): Promise<UniversityDetails>
   deleteStageAttachment(universityId: number, programId: number, stageId: number, attachmentId: number): Promise<UniversityDetails>
+  getWorkflowTemplates(): Promise<WorkflowTemplate[]>
+  createWorkflowTemplate(input: WorkflowTemplateInput): Promise<WorkflowTemplate>
+  updateWorkflowTemplate(id: number, input: WorkflowTemplateInput): Promise<WorkflowTemplate>
+  deleteWorkflowTemplate(id: number): Promise<WorkflowTemplate>
+  applyWorkflowTemplate(universityId: number, programId: number, templateId: number): Promise<UniversityDetails>
   getUniversities(): Promise<University[]>
   getUniversity(id: number): Promise<UniversityDetails>
 }

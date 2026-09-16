@@ -25,6 +25,30 @@ export interface StageAttachment {
   url: string
 }
 
+export interface WorkflowTemplateStage {
+  id: number
+  order: number
+  title: string
+  shortTitle: string
+}
+
+export interface WorkflowTemplate {
+  id: number
+  name: string
+  description: string
+  isSystem: boolean
+  updatedAt: string
+  stages: WorkflowTemplateStage[]
+  statusLabels: Record<StageStatus, string>
+}
+
+export interface WorkflowTemplateInput {
+  name: string
+  description: string
+  stages: Array<Pick<WorkflowTemplateStage, 'title' | 'shortTitle'>>
+  statusLabels: Record<StageStatus, string>
+}
+
 export interface Program {
   id: number
   universityId: number
@@ -36,6 +60,7 @@ export interface Program {
   demand: number
   stage: string
   workflow: WorkflowStage[]
+  statusLabels?: Record<StageStatus, string>
 }
 
 export interface Activity {
