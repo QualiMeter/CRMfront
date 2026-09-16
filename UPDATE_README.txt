@@ -1,4 +1,4 @@
-CRM frontend v15 — workflow builder
+CRM frontend v15.1 — import automapping fix
 
 Распакуйте архив в корень проекта с заменой файлов.
 База: v14 Excel import.
@@ -22,3 +22,8 @@ CRM frontend v15 — workflow builder
 Методы API: getWorkflowTemplates, createWorkflowTemplate, updateWorkflowTemplate, deleteWorkflowTemplate, applyWorkflowTemplate.
 
 Проверено: npm run build, npm audit --omit=dev.
+
+Исправление v15.1:
+- составные заголовки Excel теперь распознаются автоматически;
+- добавлено явное пояснение порядка импорта вузов и программ;
+- статусы сопоставления стали понятнее.
