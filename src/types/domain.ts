@@ -11,6 +11,18 @@ export interface WorkflowStage {
   date?: string
   owner?: string
   note?: string
+  attachments?: StageAttachment[]
+}
+
+export interface StageAttachment {
+  id: number
+  stageId: number
+  name: string
+  size: number
+  mimeType: string
+  uploadedAt: string
+  uploadedBy: string
+  url: string
 }
 
 export interface Program {

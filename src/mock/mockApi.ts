@@ -14,6 +14,7 @@ import type {
 } from '../types/domain'
 import { activities, programs, universities } from '../data/mockData'
 import { stageStatusLabels, workflowLabel, workflowProgress } from '../domain/workflow'
+import { getProfile } from '../profile'
 
 const delay = (ms = 180) => new Promise((resolve) => setTimeout(resolve, ms))
 const workflowTemplate = [
@@ -72,6 +73,15 @@ function validateUpdate(update: WorkflowStageUpdate) {
   if ((update.owner?.length ?? 0) > 120) throw new Error('Имя ответственного: не более 120 символов')
   if ((update.note?.length ?? 0) > 2000) throw new Error('Комментарий: не более 2000 символов')
   if (update.date && (!/^\d{4}-\d{2}-\d{2}$/.test(update.date) || !Number.isFinite(Date.parse(update.date)) || new Date(update.date).toISOString().slice(0, 10) !== update.date)) throw new Error('Укажите корректную дату')
+}
+
+const allowedAttachmentExtensions = new Set(['png', 'jpg', 'jpeg', 'pdf', 'zip', 'gz', 'gzip', 'rar', 'doc', 'docx', 'xls', 'xlsx'])
+
+function findStage(universityId: number, programId: number, stageId: number) {
+  const program = programs.find(item => item.id === programId && item.universityId === universityId)
+  const stage = program?.workflow.find(item => item.id === stageId)
+  if (!program || !stage) throw new Error('Этап программы не найден')
+  return { program, stage }
 }
 
 const tasks: CrmTask[] = [
@@ -217,12 +227,41 @@ export const mockApi: ApiClient = {
   async getUniversity(id) { await delay(); return details(id) },
   async updateProgramStage(universityId, programId, stageId, update) {
     await delay()
-    const program = programs.find(item => item.id === programId && item.universityId === universityId)
-    const stage = program?.workflow.find(item => item.id === stageId)
-    if (!program || !stage) throw new Error('Этап программы не найден')
+    const { program, stage } = findStage(universityId, programId, stageId)
     validateUpdate(update)
     stage.status = update.status; stage.owner = update.owner?.trim() || undefined; stage.date = update.date || undefined; stage.note = update.note?.trim() || undefined
     addActivity(universityId, 'Обновлён этап программы', `${program.name} · ${stage.title}: ${stageStatusLabels[stage.status]}`, stage.status === 'done' ? 'success' : stage.status === 'blocked' ? 'warning' : 'info')
+    return details(universityId)
+  },
+  async uploadStageAttachment(universityId, programId, stageId, file) {
+    await delay()
+    const { program, stage } = findStage(universityId, programId, stageId)
+    const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+    if (!allowedAttachmentExtensions.has(extension)) throw new Error('Недопустимый формат. Разрешены PNG, JPEG, PDF, ZIP, GZIP, RAR, DOC, DOCX, XLS и XLSX.')
+    if (!file.size) throw new Error('Нельзя загрузить пустой файл')
+    if (file.size > 25 * 1024 * 1024) throw new Error('Размер файла не должен превышать 25 МБ')
+    const attachment = {
+      id: Math.max(0, ...programs.flatMap(item => item.workflow.flatMap(workflowStage => workflowStage.attachments?.map(item => item.id) ?? []))) + 1,
+      stageId,
+      name: file.name,
+      size: file.size,
+      mimeType: file.type || 'application/octet-stream',
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: getProfile().name,
+      url: URL.createObjectURL(file),
+    }
+    stage.attachments = [...(stage.attachments ?? []), attachment]
+    addActivity(universityId, 'Файл прикреплён к этапу', `${program.name} · ${stage.title}: ${file.name}`, 'success')
+    return details(universityId)
+  },
+  async deleteStageAttachment(universityId, programId, stageId, attachmentId) {
+    await delay()
+    const { program, stage } = findStage(universityId, programId, stageId)
+    const index = stage.attachments?.findIndex(item => item.id === attachmentId) ?? -1
+    if (index < 0 || !stage.attachments) throw new Error('Вложение не найдено')
+    const [attachment] = stage.attachments.splice(index, 1)
+    URL.revokeObjectURL(attachment.url)
+    addActivity(universityId, 'Удалён файл этапа', `${program.name} · ${stage.title}: ${attachment.name}`, 'warning')
     return details(universityId)
   },
 }

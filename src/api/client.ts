@@ -34,6 +34,8 @@ export interface ApiClient {
   createUniversity(input: UniversityInput): Promise<UniversityDetails>
   createProgram(input: ProgramInput): Promise<UniversityDetails>
   updateProgramStage(universityId: number, programId: number, stageId: number, update: WorkflowStageUpdate): Promise<UniversityDetails>
+  uploadStageAttachment(universityId: number, programId: number, stageId: number, file: File): Promise<UniversityDetails>
+  deleteStageAttachment(universityId: number, programId: number, stageId: number, attachmentId: number): Promise<UniversityDetails>
   getUniversities(): Promise<University[]>
   getUniversity(id: number): Promise<UniversityDetails>
 }

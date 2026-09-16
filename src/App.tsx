@@ -94,6 +94,20 @@ function App() {
     setUniversities(current => current.map(university => university.id === universityId ? updated.university : university))
   }
 
+  async function uploadStageAttachment(programId: number, stageId: number, file: File) {
+    if (!details) throw new Error('Откройте карточку вуза заново')
+    const updated = await api.uploadStageAttachment(details.university.id, programId, stageId, file)
+    setDetails(updated)
+    setAllActivities(current => [...updated.activities, ...current.filter(activity => activity.universityId !== updated.university.id)])
+  }
+
+  async function deleteStageAttachment(programId: number, stageId: number, attachmentId: number) {
+    if (!details) throw new Error('Откройте карточку вуза заново')
+    const updated = await api.deleteStageAttachment(details.university.id, programId, stageId, attachmentId)
+    setDetails(updated)
+    setAllActivities(current => [...updated.activities, ...current.filter(activity => activity.universityId !== updated.university.id)])
+  }
+
   async function refreshTaskViews(task: CrmTask) {
     const [taskList, updated] = await Promise.all([api.getTasks(), api.getUniversity(task.universityId)])
     setTasks(taskList)
@@ -132,7 +146,7 @@ function App() {
   else if (path === '/') content = <OverviewPage universities={universities} programs={allPrograms} activities={allActivities} tasks={tasks} onOpenUniversity={id => navigate(`/universities/${id}`)} onOpenUniversities={() => navigate('/universities')} onOpenPrograms={() => navigate('/programs')} onOpenTasks={() => navigate('/tasks')} onOpenAnalytics={() => navigate('/analytics')} />
   else if (path === '/profile') content = <ProfilePage onOpenSettings={() => setSettingsSignal(value => value + 1)} />
   else if (path === '/universities') content = <UniversitiesPage universities={universities} initialQuery={url.searchParams.get('search') ?? ''} onCreate={createUniversity} onOpen={id => navigate(`/universities/${id}`)} />
-  else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onCreateTask={createTask} onUpdateTask={updateTask} onOpenPrograms={() => navigate('/programs')} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
+  else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onUploadStageAttachment={uploadStageAttachment} onDeleteStageAttachment={deleteStageAttachment} onCreateTask={createTask} onUpdateTask={updateTask} onOpenPrograms={() => navigate('/programs')} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
   else if (path === '/tasks') content = <div className="content"><div className="page-heading"><div><div className="eyebrow">РАБОЧИЙ ЦЕНТР</div><h1>Задачи</h1><p className="muted">Поручения по всем учебным заведениям и программам</p></div></div><TasksPanel tasks={tasks} universities={universities} programs={allPrograms} onCreate={createTask} onUpdate={updateTask} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /></div>
   else if (path === '/documents') content = <DocumentsPage documents={documents} programs={allPrograms} universities={universities} onCreate={createDocument} onUpdate={updateDocument} onDelete={deleteDocument} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/analytics') content = <AnalyticsPage universities={universities} programs={allPrograms} tasks={tasks} documents={documents} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} onOpenTasks={() => navigate('/tasks')} onOpenDocuments={() => navigate('/documents')} />
