@@ -13,6 +13,7 @@ import { AnalyticsPage } from './pages/AnalyticsPage'
 import { DocumentsPage } from './pages/DocumentsPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ReportsPage } from './pages/ReportsPage'
+import { ImportPage } from './pages/ImportPage'
 import type {
   CrmDocument,
   CrmTask,
@@ -69,7 +70,7 @@ function App() {
         if (path.startsWith('/universities/')) {
           const data = await api.getUniversity(Number(path.split('/')[2]))
           if (!cancelled) setDetails(data)
-        } else if (path === '/' || ['/programs', '/analytics', '/reports', '/tasks', '/documents'].includes(path)) {
+        } else if (path === '/' || ['/programs', '/analytics', '/reports', '/import', '/tasks', '/documents'].includes(path)) {
           const detailsList = await Promise.all(list.map(university => api.getUniversity(university.id)))
           if (!cancelled) {
             setAllPrograms(detailsList.flatMap(data => data.programs))
@@ -139,6 +140,20 @@ function App() {
     setAllActivities(current => [...updated.activities, ...current.filter(activity => activity.universityId !== input.universityId)])
     setDetails(current => current?.university.id === updated.university.id ? updated : current)
   }
+  async function importUniversities(inputs: UniversityInput[]) {
+    let count = 0
+    for (const input of inputs) { await api.createUniversity(input); count += 1 }
+    setUniversities(await api.getUniversities())
+    return count
+  }
+  async function importPrograms(inputs: ProgramInput[]) {
+    let count = 0
+    for (const input of inputs) { await api.createProgram(input); count += 1 }
+    const list = await api.getUniversities()
+    const detailsList = await Promise.all(list.map(university => api.getUniversity(university.id)))
+    setUniversities(list); setAllPrograms(detailsList.flatMap(data => data.programs)); setAllActivities(detailsList.flatMap(data => data.activities))
+    return count
+  }
 
   let content: ReactNode
   if (loading) content = <div className="content"><div className="loading card" role="status">Загрузка данных…</div></div>
@@ -151,6 +166,7 @@ function App() {
   else if (path === '/documents') content = <DocumentsPage documents={documents} programs={allPrograms} universities={universities} onCreate={createDocument} onUpdate={updateDocument} onDelete={deleteDocument} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/analytics') content = <AnalyticsPage universities={universities} programs={allPrograms} tasks={tasks} documents={documents} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} onOpenTasks={() => navigate('/tasks')} onOpenDocuments={() => navigate('/documents')} />
   else if (path === '/reports') content = <ReportsPage universities={universities} programs={allPrograms} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
+  else if (path === '/import') content = <ImportPage universities={universities} onImportUniversities={importUniversities} onImportPrograms={importPrograms} />
   else if (path === '/programs') content = <SectionPage section="programs" programs={allPrograms} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else content = <div className="content"><div className="loading card">Раздел не найден.</div></div>
 
