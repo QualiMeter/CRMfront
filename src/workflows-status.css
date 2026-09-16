@@ -1,0 +1,8 @@
+.workflow-status-section { padding: 13px; border: 1px solid #eaecf0; border-radius: 9px; background: #f9fafb; }
+.workflow-status-section > div:first-child strong { display: block; color: #344054; font-size: 11px; }
+.workflow-status-section > div:first-child span { display: block; margin-top: 2px; color: #98a2b3; font-size: 9px; }
+.workflow-status-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; margin-top: 11px; }
+.workflow-status-grid label { display: grid; gap: 5px; color: #667085; font-size: 9px; font-weight: 600; }
+.workflow-status-grid input { background: #fff; }
+@media (max-width: 1100px) { .workflow-status-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 420px) { .workflow-status-grid { grid-template-columns: 1fr; } }
