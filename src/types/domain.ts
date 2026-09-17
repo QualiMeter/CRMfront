@@ -148,3 +148,21 @@ export interface CrmTask extends TaskInput {
   createdAt: string
 }
 export type TaskUpdate = Partial<Omit<TaskInput, 'universityId'>> & { status?: CrmTask['status'] }
+
+export type UserRole = 'user' | 'manager' | 'admin'
+export type UserStatus = 'active' | 'invited' | 'blocked'
+
+export interface CrmUserInput {
+  name: string
+  email: string
+  role: UserRole
+  universityIds: number[]
+}
+
+export interface CrmUser extends CrmUserInput {
+  id: number
+  status: UserStatus
+  lastActive?: string
+}
+
+export type CrmUserUpdate = Partial<Pick<CrmUser, 'name' | 'role' | 'status' | 'universityIds'>>

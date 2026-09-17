@@ -15,6 +15,7 @@ import { ProfilePage } from './pages/ProfilePage'
 import { ReportsPage } from './pages/ReportsPage'
 import { ImportPage } from './pages/ImportPage'
 import { WorkflowsPage } from './pages/WorkflowsPage'
+import { UsersPage } from './pages/UsersPage'
 import type {
   CrmDocument,
   CrmTask,
@@ -28,6 +29,9 @@ import type {
   WorkflowStageUpdate,
   WorkflowTemplate,
   WorkflowTemplateInput,
+  CrmUser,
+  CrmUserInput,
+  CrmUserUpdate,
 } from './types/domain'
 
 const currentLocation = () => window.location.pathname + window.location.search
@@ -45,6 +49,7 @@ function App() {
   const [allActivities, setAllActivities] = useState<UniversityDetails['activities']>([])
   const [settingsSignal, setSettingsSignal] = useState(0)
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([])
+  const [users, setUsers] = useState<CrmUser[]>([])
   const url = new URL(location, window.location.origin)
   const path = url.pathname
   const programId = url.searchParams.has('program') ? Number(url.searchParams.get('program')) : null
@@ -66,12 +71,13 @@ function App() {
     setDetails(null)
     async function load() {
       try {
-        const [list, taskList, documentList, templates] = await Promise.all([api.getUniversities(), api.getTasks(), api.getDocuments(), api.getWorkflowTemplates()])
+        const [list, taskList, documentList, templates, userList] = await Promise.all([api.getUniversities(), api.getTasks(), api.getDocuments(), api.getWorkflowTemplates(), api.getUsers()])
         if (cancelled) return
         setUniversities(list)
         setTasks(taskList)
         setDocuments(documentList)
         setWorkflowTemplates(templates)
+        setUsers(userList)
         if (path.startsWith('/universities/')) {
           const data = await api.getUniversity(Number(path.split('/')[2]))
           if (!cancelled) setDetails(data)
@@ -178,6 +184,8 @@ function App() {
     setAllPrograms(current => [...current.filter(program => program.universityId !== universityId), ...updated.programs])
     setAllActivities(current => [...updated.activities, ...current.filter(activity => activity.universityId !== universityId)])
   }
+  async function createUser(input: CrmUserInput) { await api.createUser(input); setUsers(await api.getUsers()) }
+  async function updateUser(id: number, update: CrmUserUpdate) { await api.updateUser(id, update); setUsers(await api.getUsers()) }
 
   let content: ReactNode
   if (loading) content = <div className="content"><div className="loading card" role="status">Загрузка данных…</div></div>
@@ -192,6 +200,7 @@ function App() {
   else if (path === '/reports') content = <ReportsPage universities={universities} programs={allPrograms} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/import') content = <ImportPage universities={universities} onImportUniversities={importUniversities} onImportPrograms={importPrograms} />
   else if (path === '/workflows') content = <WorkflowsPage templates={workflowTemplates} universities={universities} programs={allPrograms} onCreate={createWorkflowTemplate} onUpdate={updateWorkflowTemplate} onDelete={deleteWorkflowTemplate} onApply={applyWorkflowTemplate} />
+  else if (path === '/users') content = <UsersPage users={users} universities={universities} onCreate={createUser} onUpdate={updateUser} />
   else if (path === '/programs') content = <SectionPage section="programs" programs={allPrograms} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else content = <div className="content"><div className="loading card">Раздел не найден.</div></div>
 

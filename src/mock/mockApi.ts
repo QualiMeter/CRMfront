@@ -13,6 +13,9 @@ import type {
   WorkflowStageUpdate,
   WorkflowTemplate,
   WorkflowTemplateInput,
+  CrmUser,
+  CrmUserInput,
+  CrmUserUpdate,
 } from '../types/domain'
 import { activities, programs, universities } from '../data/mockData'
 import { stageStatusLabels, workflowLabel, workflowProgress } from '../domain/workflow'
@@ -49,6 +52,14 @@ const workflowTemplates: WorkflowTemplate[] = [
     ].map(([title, shortTitle], index) => ({ id: 2000 + index + 1, order: index + 1, title, shortTitle })),
     statusLabels: { done: 'Завершено', active: 'В работе', pending: 'Запланировано', blocked: 'Есть препятствие' },
   },
+]
+
+const users: CrmUser[] = [
+  { id: 1, name: 'Алексей Сухогузов', email: 'alexey@rtk-education.ru', role: 'admin', status: 'active', universityIds: [], lastActive: '2026-09-17T07:42:00Z' },
+  { id: 2, name: 'Петров Александр Андреевич', email: 'petrov@rtk-education.ru', role: 'manager', status: 'active', universityIds: [1, 2], lastActive: '2026-09-17T06:15:00Z' },
+  { id: 3, name: 'Смирнова Елена Викторовна', email: 'smirnova@rtk-education.ru', role: 'user', status: 'active', universityIds: [1], lastActive: '2026-09-16T14:20:00Z' },
+  { id: 4, name: 'Кузнецов Илья Олегович', email: 'kuznetsov@rtk-education.ru', role: 'user', status: 'invited', universityIds: [3] },
+  { id: 5, name: 'Волкова Мария Сергеевна', email: 'volkova@rtk-education.ru', role: 'manager', status: 'blocked', universityIds: [4], lastActive: '2026-09-10T09:35:00Z' },
 ]
 
 const documents: CrmDocument[] = [
@@ -134,6 +145,15 @@ function templateFromInput(id: number, input: WorkflowTemplateInput, previous?: 
   }
 }
 
+function validateUser(input: CrmUserInput, editingId?: number) {
+  if (!input.name.trim() || input.name.trim().length > 160) throw new Error('Укажите ФИО пользователя')
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim())) throw new Error('Укажите корректный email')
+  if (!['user', 'manager', 'admin'].includes(input.role)) throw new Error('Неизвестная роль')
+  if (users.some(user => user.id !== editingId && user.email.toLowerCase() === input.email.trim().toLowerCase())) throw new Error('Пользователь с таким email уже существует')
+  if (input.role !== 'admin' && !input.universityIds.length) throw new Error('Назначьте хотя бы один вуз')
+  if (input.universityIds.some(id => !universities.some(university => university.id === id))) throw new Error('Выбран неизвестный вуз')
+}
+
 const tasks: CrmTask[] = [
   { id: 1, universityId: 1, programId: 1, title: 'Согласовать дату обучения преподавателей', owner: 'Петров А.А.', dueDate: '2026-09-15', priority: 'high', description: 'Уточнить состав группы и формат обучения.', status: 'open', createdAt: '2026-09-08T09:00:00Z' },
   { id: 2, universityId: 1, programId: 2, title: 'Проверить пакет документов', owner: 'Иванов И.С.', dueDate: '2026-09-07', priority: 'normal', description: 'Проверить комплект перед подписанием.', status: 'open', createdAt: '2026-09-06T09:00:00Z' },
@@ -188,6 +208,24 @@ function validateDocumentUpdate(document: CrmDocument, update: DocumentUpdate) {
 function taskActivity(task: CrmTask, title: string) { addActivity(task.universityId, title, task.title, task.status === 'done' ? 'success' : 'info') }
 
 export const mockApi: ApiClient = {
+  async getUsers() { await delay(); return structuredClone(users) },
+  async createUser(input) {
+    await delay(); validateUser(input)
+    const user: CrmUser = { id: Math.max(0, ...users.map(item => item.id)) + 1, name: input.name.trim(), email: input.email.trim().toLowerCase(), role: input.role, universityIds: input.role === 'admin' ? [] : [...new Set(input.universityIds)], status: 'invited' }
+    users.push(user)
+    return structuredClone(user)
+  },
+  async updateUser(id, update) {
+    await delay()
+    const index = users.findIndex(item => item.id === id)
+    if (index < 0) throw new Error('Пользователь не найден')
+    const previous = users[index]
+    const next: CrmUser = { ...previous, ...update, id: previous.id, email: previous.email, universityIds: update.role === 'admin' ? [] : [...new Set(update.universityIds ?? previous.universityIds)] }
+    validateUser(next, id)
+    if (!['active', 'invited', 'blocked'].includes(next.status)) throw new Error('Неизвестный статус пользователя')
+    next.name = next.name.trim(); users[index] = next
+    return structuredClone(next)
+  },
   async getWorkflowTemplates() { await delay(); return structuredClone(workflowTemplates) },
   async createWorkflowTemplate(input) {
     await delay(); validateWorkflowTemplate(input)

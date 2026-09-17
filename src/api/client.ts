@@ -13,6 +13,9 @@ import type {
   WorkflowStageUpdate,
   WorkflowTemplate,
   WorkflowTemplateInput,
+  CrmUser,
+  CrmUserInput,
+  CrmUserUpdate,
 } from '../types/domain'
 
 export interface UniversityDetails {
@@ -24,6 +27,9 @@ export interface UniversityDetails {
 }
 
 export interface ApiClient {
+  getUsers(): Promise<CrmUser[]>
+  createUser(input: CrmUserInput): Promise<CrmUser>
+  updateUser(id: number, update: CrmUserUpdate): Promise<CrmUser>
   getTasks(): Promise<CrmTask[]>
   createTask(input: TaskInput): Promise<CrmTask>
   updateTask(id: number, update: TaskUpdate): Promise<CrmTask>
