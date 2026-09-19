@@ -1,5 +1,4 @@
 import type { ApiClient, UniversityDetails } from './client'
-import { mockApi } from '../mock/mockApi'
 import { authorizedFetch } from './auth'
 import type {
   Activity,
@@ -17,6 +16,10 @@ import type {
   UniversityInput,
   WorkflowStage,
   WorkflowStageUpdate,
+  WorkflowTemplate,
+  CrmUser,
+  CrmUserInput,
+  CrmUserUpdate,
 } from '../types/domain'
 
 const API_URL = (import.meta.env.VITE_API_URL || 'https://crmbackend-hw.up.railway.app').replace(/\/$/, '')
@@ -264,16 +267,83 @@ async function patchRow<T extends Row>(name: string, id: number, payload: Row): 
   return request<T>(`/api/v1/${name.replaceAll('_', '-')}/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
 }
 
+const userRole = (roles: unknown): CrmUser['role'] => {
+  const values = Array.isArray(roles) ? roles.map(String) : []
+  return values.includes('admin') ? 'admin' : values.includes('manager') ? 'manager' : 'user'
+}
+
+async function mapUsers(rows: Row[]): Promise<CrmUser[]> {
+  const access = await request<Row[]>('/api/v1/user-university-access?limit=500')
+  return rows.map(row => ({
+    id: number(row.id),
+    name: text(row.full_name, text(row.email)),
+    email: text(row.email),
+    role: userRole(row.roles),
+    status: ['active', 'invited', 'blocked'].includes(text(row.status)) ? text(row.status) as CrmUser['status'] : 'invited',
+    universityIds: access.filter(item => number(item.user_id) === number(row.id)).map(item => number(item.university_id)),
+    lastActive: text(row.last_login_at) || undefined,
+  }))
+}
+
+async function syncUniversityAccess(userId: number, universityIds: number[], isManager: boolean) {
+  const current = (await request<Row[]>('/api/v1/user-university-access?limit=500')).filter(item => number(item.user_id) === userId)
+  const wanted = new Set(universityIds)
+  await Promise.all(current.filter(item => !wanted.has(number(item.university_id))).map(item =>
+    request<void>(`/api/v1/user-university-access/${userId}/${number(item.university_id)}`, { method: 'DELETE' })))
+  const existing = new Set(current.map(item => number(item.university_id)))
+  await Promise.all(universityIds.filter(id => !existing.has(id)).map(universityId => createRow('user_university_access', {
+    user_id: userId, university_id: universityId, is_manager: isManager,
+  })))
+}
+
+async function remoteWorkflowTemplates(): Promise<WorkflowTemplate[]> {
+  const [templates, stages] = await Promise.all([
+    request<Row[]>('/api/v1/workflow-templates?limit=500'),
+    request<Row[]>('/api/v1/workflow-template-stages?limit=500'),
+  ])
+  return templates.map(template => ({
+    id: number(template.id),
+    name: text(template.name, 'Процесс'),
+    description: text(template.description),
+    isSystem: Boolean(template.is_default),
+    updatedAt: text(template.updated_at, text(template.created_at, new Date(0).toISOString())),
+    stages: stages.filter(stage => number(stage.template_id) === number(template.id))
+      .sort((a, b) => number(a.position) - number(b.position))
+      .map(stage => ({ id: number(stage.id), order: number(stage.position), title: text(stage.name, 'Этап'), shortTitle: text(stage.code, text(stage.name, 'Этап')) })),
+    statusLabels: { done: 'Выполнено', active: 'В процессе', pending: 'Предстоит', blocked: 'Требует внимания' },
+  }))
+}
+
 export const httpApi: ApiClient = {
-  // Until backend auth endpoints appear, the admin/demo sections keep their local implementation.
-  getUsers: mockApi.getUsers,
-  createUser: mockApi.createUser,
-  updateUser: mockApi.updateUser,
-  getWorkflowTemplates: mockApi.getWorkflowTemplates,
-  createWorkflowTemplate: mockApi.createWorkflowTemplate,
-  updateWorkflowTemplate: mockApi.updateWorkflowTemplate,
-  deleteWorkflowTemplate: mockApi.deleteWorkflowTemplate,
-  applyWorkflowTemplate: mockApi.applyWorkflowTemplate,
+  async getUsers() {
+    return mapUsers(await request<Row[]>('/api/v1/users'))
+  },
+  async createUser(input: CrmUserInput) {
+    const row = await request<Row>('/api/v1/users', { method: 'POST', body: JSON.stringify({
+      email: input.email, full_name: input.name, status: 'invited', role_codes: [input.role],
+    }) })
+    if (input.role !== 'admin') await syncUniversityAccess(number(row.id), input.universityIds, input.role === 'manager')
+    return (await mapUsers([row]))[0]
+  },
+  async updateUser(id: number, update: CrmUserUpdate) {
+    const payload: Row = {}
+    if (update.name !== undefined) payload.full_name = update.name
+    if (update.status !== undefined) payload.status = update.status
+    if (update.role !== undefined) payload.role_codes = [update.role]
+    const row = await request<Row>(`/api/v1/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+    if (update.universityIds !== undefined || update.role !== undefined) {
+      const existing = (await mapUsers([row]))[0]
+      const role = update.role ?? existing.role
+      await syncUniversityAccess(id, role === 'admin' ? [] : (update.universityIds ?? existing.universityIds), role === 'manager')
+    }
+    return (await mapUsers([row]))[0]
+  },
+
+  async getWorkflowTemplates() { return remoteWorkflowTemplates() },
+  async createWorkflowTemplate() { throw new Error('Создание шаблонов workflow ещё не подключено к backend') },
+  async updateWorkflowTemplate() { throw new Error('Изменение шаблонов workflow ещё не подключено к backend') },
+  async deleteWorkflowTemplate() { throw new Error('Удаление шаблонов workflow ещё не подключено к backend') },
+  async applyWorkflowTemplate() { throw new Error('Применение шаблонов workflow ещё не подключено к backend') },
 
   async getUniversities() {
     return remoteUniversities()
