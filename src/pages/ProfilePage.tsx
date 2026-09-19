@@ -1,10 +1,26 @@
 import { useState, type FormEvent } from 'react'
 import { Icon } from '../components/Icon'
 import { getProfile, profileInitials, saveProfile, type CrmProfile } from '../profile'
+import type { AuthUser } from '../api/auth'
 
-export function ProfilePage({ onOpenSettings }: { onOpenSettings: () => void }) {
-  const [profile, setProfile] = useState<CrmProfile>(() => getProfile())
-  const [draft, setDraft] = useState<CrmProfile>(() => getProfile())
+const roleNames: Record<string, string> = { user: 'Пользователь', manager: 'Менеджер', admin: 'Администратор' }
+
+function profileFromUser(user: AuthUser): CrmProfile {
+  const preferences = getProfile()
+  return {
+    ...preferences,
+    name: user.full_name || user.username,
+    role: user.roles.map(role => roleNames[role] ?? role).join(', ') || 'Пользователь',
+    email: user.email,
+    department: '',
+    phone: '',
+  }
+}
+
+export function ProfilePage({ onOpenSettings, currentUser }: { onOpenSettings: () => void; currentUser: AuthUser }) {
+  const backendProfile = profileFromUser(currentUser)
+  const [profile, setProfile] = useState<CrmProfile>(backendProfile)
+  const [draft, setDraft] = useState<CrmProfile>(backendProfile)
   const [editing, setEditing] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -22,15 +38,7 @@ export function ProfilePage({ onOpenSettings }: { onOpenSettings: () => void }) 
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    const next = {
-      ...draft,
-      name: draft.name.trim(),
-      role: draft.role.trim(),
-      department: draft.department.trim(),
-      email: draft.email.trim(),
-      phone: draft.phone.trim(),
-    }
-    if (!next.name || !next.role || !next.email) return
+    const next = { ...profile, taskNotifications: draft.taskNotifications, overdueNotifications: draft.overdueNotifications }
     saveProfile(next)
     setProfile(next)
     setDraft(next)
@@ -49,7 +57,7 @@ export function ProfilePage({ onOpenSettings }: { onOpenSettings: () => void }) 
   return <div className="content profile-page">
     <div className="page-heading">
       <div><div className="eyebrow">УЧЁТНАЯ ЗАПИСЬ</div><h1>Мой профиль</h1><p className="muted">Контактные данные и персональные настройки CRM</p></div>
-      {!editing && <button className="primary-button" onClick={startEditing}>Редактировать профиль</button>}
+      {!editing && <button className="primary-button" onClick={startEditing}>Настроить уведомления</button>}
     </div>
 
     {message && <div className="profile-message" role="status">{message}</div>}
@@ -67,19 +75,14 @@ export function ProfilePage({ onOpenSettings }: { onOpenSettings: () => void }) 
         <div className="card-header"><div><h2>Основная информация</h2><p>Данные отображаются в интерфейсе CRM</p></div></div>
         {editing ? <form className="profile-form" onSubmit={submit}>
           <div className="profile-form-grid">
-            <label>Имя и фамилия<input required maxLength={120} value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} /></label>
-            <label>Роль<input required maxLength={80} value={draft.role} onChange={event => setDraft(current => ({ ...current, role: event.target.value }))} /></label>
-            <label>Подразделение<input maxLength={120} value={draft.department} onChange={event => setDraft(current => ({ ...current, department: event.target.value }))} /></label>
-            <label>Рабочая почта<input required type="email" maxLength={160} value={draft.email} onChange={event => setDraft(current => ({ ...current, email: event.target.value }))} /></label>
-            <label>Телефон<input maxLength={40} value={draft.phone} onChange={event => setDraft(current => ({ ...current, phone: event.target.value }))} /></label>
+            <p>Имя, почта и роль загружаются из учётной записи backend и изменяются администратором.</p>
           </div>
           <div className="profile-form-actions"><button type="button" className="task-action" onClick={cancelEditing}>Отмена</button><button className="primary-button" type="submit">Сохранить</button></div>
         </form> : <dl className="profile-details-list">
           <div><dt>Имя</dt><dd>{profile.name}</dd></div>
           <div><dt>Роль</dt><dd>{profile.role}</dd></div>
-          <div><dt>Подразделение</dt><dd>{profile.department || 'Не указано'}</dd></div>
           <div><dt>Почта</dt><dd><a href={`mailto:${profile.email}`}>{profile.email}</a></dd></div>
-          <div><dt>Телефон</dt><dd>{profile.phone || 'Не указан'}</dd></div>
+          <div><dt>Логин</dt><dd>{currentUser.username}</dd></div>
         </dl>}
       </section>
     </div>
