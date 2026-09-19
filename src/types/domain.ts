@@ -15,7 +15,7 @@ export interface WorkflowStage {
 }
 
 export interface StageAttachment {
-  id: number
+  id: string
   stageId: number
   name: string
   size: number
@@ -119,6 +119,7 @@ export interface DocumentInput {
   size: string
   mimeType: string
   note: string
+  file?: File
 }
 
 export interface CrmDocument extends DocumentInput {
@@ -128,7 +129,7 @@ export interface CrmDocument extends DocumentInput {
   updatedAt: string
 }
 
-export type DocumentUpdate = Partial<Pick<CrmDocument, 'programId' | 'category' | 'owner' | 'status' | 'note' | 'version'>>
+export type DocumentUpdate = Partial<Pick<CrmDocument, 'programId' | 'category' | 'owner' | 'status' | 'note'>> & { file?: File }
 
 export type WorkflowStageUpdate = Pick<WorkflowStage, 'status' | 'owner' | 'date' | 'note'>
 
