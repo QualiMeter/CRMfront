@@ -28,7 +28,7 @@ const REQUEST_TIMEOUT = 35_000
 
 function requestBase(path: string) {
   // Railway occasionally terminates the direct browser response from the
-  // Keycloak-backed users endpoint. On Vercel, proxy only that endpoint through
+  // users endpoint. On Vercel, proxy only that endpoint through
   // the app origin; authorization headers and the backend contract stay intact.
   if (path.startsWith('/api/v1/users') && window.location.hostname.endsWith('.vercel.app')) {
     return `${window.location.origin}/backend`
