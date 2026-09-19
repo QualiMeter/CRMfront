@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { Icon } from '../components/Icon'
 import { getProfile, profileInitials, saveProfile, type CrmProfile } from '../profile'
 import type { AuthUser } from '../api/auth'
@@ -20,36 +20,11 @@ function profileFromUser(user: AuthUser): CrmProfile {
 export function ProfilePage({ onOpenSettings, currentUser }: { onOpenSettings: () => void; currentUser: AuthUser }) {
   const backendProfile = profileFromUser(currentUser)
   const [profile, setProfile] = useState<CrmProfile>(backendProfile)
-  const [draft, setDraft] = useState<CrmProfile>(backendProfile)
-  const [editing, setEditing] = useState(false)
   const [message, setMessage] = useState('')
-
-  function startEditing() {
-    setDraft(profile)
-    setMessage('')
-    setEditing(true)
-  }
-
-  function cancelEditing() {
-    setDraft(profile)
-    setEditing(false)
-    setMessage('')
-  }
-
-  function submit(event: FormEvent) {
-    event.preventDefault()
-    const next = { ...profile, taskNotifications: draft.taskNotifications, overdueNotifications: draft.overdueNotifications }
-    saveProfile(next)
-    setProfile(next)
-    setDraft(next)
-    setEditing(false)
-    setMessage('Профиль сохранён')
-  }
 
   function togglePreference(field: 'taskNotifications' | 'overdueNotifications') {
     const next = { ...profile, [field]: !profile[field] }
     setProfile(next)
-    setDraft(next)
     saveProfile(next)
     setMessage('Настройки уведомлений обновлены')
   }
@@ -57,7 +32,6 @@ export function ProfilePage({ onOpenSettings, currentUser }: { onOpenSettings: (
   return <div className="content profile-page">
     <div className="page-heading">
       <div><div className="eyebrow">УЧЁТНАЯ ЗАПИСЬ</div><h1>Мой профиль</h1><p className="muted">Контактные данные и персональные настройки CRM</p></div>
-      {!editing && <button className="primary-button" onClick={startEditing}>Настроить уведомления</button>}
     </div>
 
     {message && <div className="profile-message" role="status">{message}</div>}
@@ -73,17 +47,12 @@ export function ProfilePage({ onOpenSettings, currentUser }: { onOpenSettings: (
 
       <section className="card profile-details-card">
         <div className="card-header"><div><h2>Основная информация</h2><p>Данные отображаются в интерфейсе CRM</p></div></div>
-        {editing ? <form className="profile-form" onSubmit={submit}>
-          <div className="profile-form-grid">
-            <p>Имя, почта и роль загружаются из учётной записи backend и изменяются администратором.</p>
-          </div>
-          <div className="profile-form-actions"><button type="button" className="task-action" onClick={cancelEditing}>Отмена</button><button className="primary-button" type="submit">Сохранить</button></div>
-        </form> : <dl className="profile-details-list">
+        <dl className="profile-details-list">
           <div><dt>Имя</dt><dd>{profile.name}</dd></div>
           <div><dt>Роль</dt><dd>{profile.role}</dd></div>
           <div><dt>Почта</dt><dd><a href={`mailto:${profile.email}`}>{profile.email}</a></dd></div>
           <div><dt>Логин</dt><dd>{currentUser.username}</dd></div>
-        </dl>}
+        </dl>
       </section>
     </div>
 
@@ -98,7 +67,7 @@ export function ProfilePage({ onOpenSettings, currentUser }: { onOpenSettings: (
 
       <section className="card profile-interface-card">
         <div className="card-header"><div><h2>Интерфейс</h2><p>Отображение рабочего пространства</p></div></div>
-        <div className="profile-interface-copy"><Icon name="settings" size={22} /><div><strong>Настройки интерфейса</strong><p>Компактный режим и демо-подсказки находятся в отдельной панели.</p></div></div>
+        <div className="profile-interface-copy"><Icon name="settings" size={22} /><div><strong>Настройки интерфейса</strong><p>Компактный режим и пояснения находятся в отдельной панели.</p></div></div>
         <button className="outline-button profile-settings-button" onClick={onOpenSettings}>Открыть настройки</button>
       </section>
     </div>
