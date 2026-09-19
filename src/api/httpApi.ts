@@ -26,6 +26,16 @@ import type {
 const API_URL = (import.meta.env.VITE_API_URL || 'https://crmbackend-hw.up.railway.app').replace(/\/$/, '')
 const REQUEST_TIMEOUT = 35_000
 
+function requestBase(path: string) {
+  // Railway occasionally terminates the direct browser response from the
+  // Keycloak-backed users endpoint. On Vercel, proxy only that endpoint through
+  // the app origin; authorization headers and the backend contract stay intact.
+  if (path.startsWith('/api/v1/users') && window.location.hostname.endsWith('.vercel.app')) {
+    return `${window.location.origin}/backend`
+  }
+  return API_URL
+}
+
 type Row = Record<string, unknown>
 
 const text = (value: unknown, fallback = '') => typeof value === 'string' ? value : fallback
@@ -91,7 +101,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
   try {
-    const response = await authorizedFetch(`${API_URL}${path}`, {
+    const response = await authorizedFetch(`${requestBase(path)}${path}`, {
       ...init,
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json', ...init?.headers },
