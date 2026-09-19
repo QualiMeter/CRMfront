@@ -75,13 +75,16 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (!session) return
+    const authenticatedUser = session.user
     let cancelled = false
     setLoading(true)
     setError('')
     setDetails(null)
     async function load() {
       try {
-        const [list, taskList, documentList, templates, userList] = await Promise.all([api.getUniversities(), api.getTasks(), api.getDocuments(), api.getWorkflowTemplates(), api.getUsers()])
+        const canManageUsers = authenticatedUser.roles.includes('admin')
+        const [list, taskList, documentList, templates, userList] = await Promise.all([api.getUniversities(), api.getTasks(), api.getDocuments(), api.getWorkflowTemplates(), canManageUsers ? api.getUsers() : Promise.resolve([])])
         if (cancelled) return
         setUniversities(list)
         setTasks(taskList)
@@ -203,7 +206,7 @@ function App() {
   if (loading) content = <div className="content"><div className="loading card" role="status">Загрузка данных…</div></div>
   else if (error) content = <div className="content"><div className="loading card"><p role="alert">{error}</p><button className="outline-button" onClick={() => setRetry(value => value + 1)}>Повторить загрузку</button></div></div>
   else if (path === '/') content = <OverviewPage universities={universities} programs={allPrograms} activities={allActivities} tasks={tasks} onOpenUniversity={id => navigate(`/universities/${id}`)} onOpenUniversities={() => navigate('/universities')} onOpenPrograms={() => navigate('/programs')} onOpenTasks={() => navigate('/tasks')} onOpenAnalytics={() => navigate('/analytics')} />
-  else if (path === '/profile') content = <ProfilePage onOpenSettings={() => setSettingsSignal(value => value + 1)} />
+  else if (path === '/profile') content = <ProfilePage currentUser={session.user} onOpenSettings={() => setSettingsSignal(value => value + 1)} />
   else if (path === '/universities') content = <UniversitiesPage universities={universities} initialQuery={url.searchParams.get('search') ?? ''} onCreate={createUniversity} onOpen={id => navigate(`/universities/${id}`)} />
   else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onUploadStageAttachment={uploadStageAttachment} onDeleteStageAttachment={deleteStageAttachment} onCreateTask={createTask} onUpdateTask={updateTask} onOpenPrograms={() => navigate('/programs')} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
   else if (path === '/tasks') content = <div className="content"><div className="page-heading"><div><div className="eyebrow">РАБОЧИЙ ЦЕНТР</div><h1>Задачи</h1><p className="muted">Поручения по всем учебным заведениям и программам</p></div></div><TasksPanel tasks={tasks} universities={universities} programs={allPrograms} onCreate={createTask} onUpdate={updateTask} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /></div>
