@@ -108,7 +108,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     })
     if (!response.ok) {
       const body = await response.text()
-      throw new Error(body || `Backend вернул ${response.status}`)
+      try {
+        const data = JSON.parse(body) as { detail?: string; message?: string; request_id?: string }
+        const message = data.detail || data.message || `Backend вернул ${response.status}`
+        throw new Error(`${message} (${path}${data.request_id ? `; request_id: ${data.request_id}` : ''})`)
+      } catch (error) {
+        if (error instanceof SyntaxError) throw new Error(body || `Backend вернул ${response.status}`)
+        throw error
+      }
     }
     if (response.status === 204) return undefined as T
     return await response.json() as T
