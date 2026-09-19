@@ -90,7 +90,21 @@ function App() {
       try {
         const canManageUsers = authenticatedUser.roles.includes('admin')
         const canManageContent = canManageUsers || authenticatedUser.roles.includes('manager')
-        const [list, taskList, documentList, templates, userList] = await Promise.all([api.getUniversities(), api.getTasks(), api.getDocuments(), canManageContent ? api.getWorkflowTemplates() : Promise.resolve([]), canManageUsers ? api.getUsers() : Promise.resolve([])])
+        // The profile is entirely backed by /auth/me and must not be blocked by
+        // an unrelated operational endpoint timing out.
+        if (path === '/profile') return
+
+        const needsTasks = ['/', '/tasks', '/analytics'].includes(path)
+        const needsDocuments = ['/documents', '/analytics'].includes(path)
+        const needsTemplates = path === '/workflows' && canManageContent
+        const needsUsers = path === '/users' && canManageUsers
+        const [list, taskList, documentList, templates, userList] = await Promise.all([
+          api.getUniversities(),
+          needsTasks ? api.getTasks() : Promise.resolve([]),
+          needsDocuments ? api.getDocuments() : Promise.resolve([]),
+          needsTemplates ? api.getWorkflowTemplates() : Promise.resolve([]),
+          needsUsers ? api.getUsers() : Promise.resolve([]),
+        ])
         if (cancelled) return
         setUniversities(list)
         setTasks(taskList)
@@ -100,7 +114,7 @@ function App() {
         if (path.startsWith('/universities/')) {
           const data = await api.getUniversity(Number(path.split('/')[2]))
           if (!cancelled) setDetails(data)
-        } else if (path === '/' || ['/programs', '/analytics', '/reports', '/import', '/workflows', '/tasks', '/documents'].includes(path)) {
+        } else if (path === '/' || ['/programs', '/analytics', '/reports', '/workflows', '/tasks', '/documents'].includes(path)) {
           const detailsList = await Promise.all(list.map(university => api.getUniversity(university.id)))
           if (!cancelled) {
             setAllPrograms(detailsList.flatMap(data => data.programs))
