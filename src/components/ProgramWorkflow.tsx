@@ -7,7 +7,7 @@ export function ProgramWorkflow({ program, onSave, onUpload, onDeleteAttachment 
   program: Program
   onSave: (stageId: number, update: WorkflowStageUpdate) => Promise<void>
   onUpload: (stageId: number, file: File) => Promise<void>
-  onDeleteAttachment: (stageId: number, attachmentId: number) => Promise<void>
+  onDeleteAttachment: (stageId: number, attachmentId: string) => Promise<void>
 }) {
   const [selectedId, setSelectedId] = useState(currentStage(program.workflow)?.id)
   const [saving, setSaving] = useState(false)
@@ -44,7 +44,7 @@ function StageEditor({ stage, statusLabels, onSave, onUpload, onDeleteAttachment
   statusLabels: Record<WorkflowStage['status'], string>
   onSave: (update: WorkflowStageUpdate) => Promise<void>
   onUpload: (file: File) => Promise<void>
-  onDeleteAttachment: (attachmentId: number) => Promise<void>
+  onDeleteAttachment: (attachmentId: string) => Promise<void>
 }) {
   const [draft, setDraft] = useState<WorkflowStageUpdate>({ status: stage.status, owner: stage.owner ?? '', date: stage.date ?? '', note: stage.note ?? '' })
   const [saving, setSaving] = useState(false)
@@ -74,12 +74,13 @@ function StageEditor({ stage, statusLabels, onSave, onUpload, onDeleteAttachment
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file || uploading) return
+    if (file.size > 25 * 1024 * 1024) { setError('Файл превышает ограничение 25 МБ'); return }
     setUploading(true); setMessage(''); setError('')
     try { await onUpload(file); setMessage(`Файл «${file.name}» прикреплён`) }
     catch (error) { setError(error instanceof Error ? error.message : 'Не удалось прикрепить файл') }
     finally { setUploading(false) }
   }
-  async function removeAttachment(id: number, name: string) {
+  async function removeAttachment(id: string, name: string) {
     if (!window.confirm(`Удалить вложение «${name}»?`)) return
     setUploading(true); setMessage(''); setError('')
     try { await onDeleteAttachment(id); setMessage('Вложение удалено') }
