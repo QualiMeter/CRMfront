@@ -131,7 +131,7 @@ function App() {
     return () => { cancelled = true }
   }, [path, retry, session])
 
-  if (!session) return <AuthPage onAuthenticated={setSession} />
+  if (!session) return <AuthPage onAuthenticated={nextSession => { setLocation(currentLocation()); setSession(nextSession) }} />
   const canManageContent = session.user.roles.includes('admin') || session.user.roles.includes('manager')
 
   async function saveStage(programId: number, stageId: number, update: WorkflowStageUpdate) {
