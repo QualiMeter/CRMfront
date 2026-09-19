@@ -17,6 +17,7 @@ const secondaryItems = [
   { label: 'Задачи', icon: 'check' as const, path: '/tasks' },
   { label: 'Документы', icon: 'file' as const, path: '/documents' },
 ]
+const roleLabels: Record<string, string> = { user: 'Пользователь', manager: 'Менеджер', admin: 'Администратор' }
 
 function breadcrumb(path: string) {
   const map: Record<string, string> = {'/':'Обзор','/profile':'Мой профиль','/universities':'Вузы','/programs':'Программы','/analytics':'Аналитика','/reports':'Отчеты','/import':'Импорт','/workflows':'Процессы','/users':'Пользователи','/tasks':'Задачи','/documents':'Документы'}
@@ -35,6 +36,13 @@ export function AppShell({ children, path, navigate, taskCount, settingsSignal =
   const profileMenuRef = useRef<HTMLDivElement>(null)
   const displayName = currentUser.full_name || currentUser.username
   const initials = profileInitials(displayName)
+  const isAdmin = currentUser.roles.includes('admin')
+  const canManageContent = isAdmin || currentUser.roles.includes('manager')
+  const visibleSecondaryItems = secondaryItems.filter(item => {
+    if (item.path === '/users') return isAdmin
+    if (item.path === '/import' || item.path === '/workflows') return canManageContent
+    return true
+  })
 
   useEffect(() => { setMenuOpen(false); setNotificationsOpen(false); setProfileMenuOpen(false) }, [path])
   useEffect(() => { if (settingsSignal > 0) setSettingsOpen(true) }, [settingsSignal])
@@ -57,9 +65,9 @@ export function AppShell({ children, path, navigate, taskCount, settingsSignal =
     else if (value.includes('док')) navigate('/documents')
     else if (value.includes('анал')) navigate('/analytics')
     else if (value.includes('отч')) navigate('/reports')
-    else if (value.includes('импорт') || value.includes('excel')) navigate('/import')
-    else if (value.includes('процесс') || value.includes('workflow')) navigate('/workflows')
-    else if (value.includes('пользов') || value.includes('сотруд') || value.includes('роль')) navigate('/users')
+    else if ((value.includes('импорт') || value.includes('excel')) && canManageContent) navigate('/import')
+    else if ((value.includes('процесс') || value.includes('workflow')) && canManageContent) navigate('/workflows')
+    else if ((value.includes('пользов') || value.includes('сотруд') || value.includes('роль')) && currentUser.roles.includes('admin')) navigate('/users')
     else if (value.includes('программ') || value.includes('курс')) navigate('/programs')
     else if (value.includes('профил') || value.includes('аккаунт')) navigate('/profile')
     else if (value.includes('вуз') || value.includes('универ')) navigate('/universities')
@@ -83,11 +91,11 @@ export function AppShell({ children, path, navigate, taskCount, settingsSignal =
       <div className="sidebar-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
       <nav className="nav-list" aria-label="Навигация">{navItems.map((item) => <button key={item.path} className={`nav-item ${isActive(item.path) ? 'active' : ''}`} onClick={() => navigate(item.path)}><Icon name={item.icon} size={19} /><span>{item.label}</span></button>)}</nav>
       <div className="sidebar-label second">УПРАВЛЕНИЕ</div>
-      <nav className="nav-list" aria-label="Навигация">{secondaryItems.map((item) => <button key={item.path} className={`nav-item ${isActive(item.path) ? 'active' : ''}`} onClick={() => navigate(item.path)}><Icon name={item.icon} size={19} /><span>{item.label}</span>{item.path === '/tasks' && <span className="nav-badge">{taskCount}</span>}</button>)}</nav>
+      <nav className="nav-list" aria-label="Навигация">{visibleSecondaryItems.map((item) => <button key={item.path} className={`nav-item ${isActive(item.path) ? 'active' : ''}`} onClick={() => navigate(item.path)}><Icon name={item.icon} size={19} /><span>{item.label}</span>{item.path === '/tasks' && <span className="nav-badge">{taskCount}</span>}</button>)}</nav>
       <div className="sidebar-bottom">
         <button className="nav-item" onClick={() => setSettingsOpen(true)}><Icon name="settings" size={19} /><span>Настройки</span></button>
         <div className="user-card" ref={profileMenuRef}>
-          <button className="user-main-button" onClick={() => navigate('/profile')} aria-label="Открыть мой профиль"><div className="avatar">{initials}</div><div className="user-meta"><strong>{displayName}</strong><span>{currentUser.roles.join(', ') || 'Пользователь'}</span></div></button>
+          <button className="user-main-button" onClick={() => navigate('/profile')} aria-label="Открыть мой профиль"><div className="avatar">{initials}</div><div className="user-meta"><strong>{displayName}</strong><span>{currentUser.roles.map(role => roleLabels[role] ?? role).join(', ') || 'Пользователь'}</span></div></button>
           <button className="user-more-button" aria-label="Меню профиля" aria-expanded={profileMenuOpen} onClick={() => setProfileMenuOpen(open => !open)}><Icon name="more" size={18} /></button>
           {profileMenuOpen && <div className="profile-menu" role="menu">
             <button role="menuitem" onClick={() => navigate('/profile')}><span className="profile-menu-icon">{initials}</span><span><strong>Мой профиль</strong><small>{currentUser.email}</small></span></button>
@@ -99,7 +107,7 @@ export function AppShell({ children, path, navigate, taskCount, settingsSignal =
       </div>
     </aside>
     <main className="main"><header className="topbar"><div className="topbar-leading"><button ref={menuButton} className="mobile-menu-button" aria-expanded={menuOpen} aria-controls="mobile-navigation" aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'} onClick={() => setMenuOpen(open => !open)}><span aria-hidden="true">{menuOpen ? '×' : '☰'}</span></button><div className="breadcrumbs"><span>CRM</span><span>/</span><strong>{breadcrumb(path)}</strong></div></div><div className="topbar-actions"><form className="search" onSubmit={event => { event.preventDefault(); submitSearch() }}><Icon name="search" size={18} /><input aria-label="Поиск" value={search} onChange={event => setSearch(event.target.value)} placeholder="Поиск..." /></form><div className="notification-wrap"><button className="icon-button" aria-label="Уведомления" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen(open => !open)}><Icon name="bell" size={19} />{taskCount > 0 && <span className="notification-dot" />}</button>{notificationsOpen && <div className="top-popover"><strong>Уведомления</strong><p>{taskCount ? `Открытых задач: ${taskCount}. Проверьте сроки и ответственных.` : 'Новых уведомлений нет.'}</p><button className="popover-action" onClick={() => navigate('/tasks')}>Перейти к задачам <Icon name="arrow" size={14} /></button></div>}</div><button className="top-avatar top-avatar-button" aria-label="Открыть мой профиль" onClick={() => navigate('/profile')}>{initials}</button></div></header>{menuOpen && <nav id="mobile-navigation" className="mobile-navigation" aria-label="Разделы CRM" onKeyDown={event => { if (event.key === 'Escape') closeMenu() }}>
-      {[...navItems, ...secondaryItems].map(item => <button key={item.path} aria-current={isActive(item.path) ? 'page' : undefined} className={`nav-item ${isActive(item.path) ? 'active' : ''}`} onClick={() => { closeMenu(); navigate(item.path) }}><Icon name={item.icon} size={20} />{item.label}{item.path === '/tasks' && <span className="nav-badge">{taskCount}</span>}</button>)}
+      {[...navItems, ...visibleSecondaryItems].map(item => <button key={item.path} aria-current={isActive(item.path) ? 'page' : undefined} className={`nav-item ${isActive(item.path) ? 'active' : ''}`} onClick={() => { closeMenu(); navigate(item.path) }}><Icon name={item.icon} size={20} />{item.label}{item.path === '/tasks' && <span className="nav-badge">{taskCount}</span>}</button>)}
       <button className={`nav-item ${path === '/profile' ? 'active' : ''}`} onClick={() => { closeMenu(); navigate('/profile') }}><span className="mobile-profile-mark">{initials}</span>Мой профиль</button>
       <button className="nav-item" onClick={() => { closeMenu(); setSettingsOpen(true) }}><Icon name="settings" size={20} />Настройки</button>
     </nav>}{children}</main>
