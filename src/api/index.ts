@@ -1,4 +1,4 @@
 import { httpApi } from './httpApi'
 
-// Реальный Railway API с точечным fallback на mock при недоступности чтения.
+// Все рабочие данные загружаются из Railway API; скрытого mock-fallback нет.
 export const api = httpApi
