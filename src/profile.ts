@@ -9,11 +9,11 @@ export interface CrmProfile {
 }
 
 export const DEFAULT_PROFILE: CrmProfile = {
-  name: 'Алексей Петров',
-  role: 'Менеджер',
-  department: 'Образовательные проекты',
-  email: 'a.petrov@rtk.example',
-  phone: '+7 (999) 000-00-00',
+  name: '',
+  role: '',
+  department: '',
+  email: '',
+  phone: '',
   taskNotifications: true,
   overdueNotifications: true,
 }
