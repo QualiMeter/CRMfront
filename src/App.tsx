@@ -17,7 +17,7 @@ import { ImportPage } from './pages/ImportPage'
 import { WorkflowsPage } from './pages/WorkflowsPage'
 import { UsersPage } from './pages/UsersPage'
 import { AuthPage } from './pages/AuthPage'
-import { getSession, logout, type AuthSession } from './api/auth'
+import { getSession, logout, syncCurrentUser, type AuthSession } from './api/auth'
 import type {
   CrmDocument,
   CrmTask,
@@ -69,6 +69,11 @@ function App() {
 
   useEffect(() => {
     if (!session) return
+    void syncCurrentUser().catch(() => undefined)
+  }, [session?.accessToken])
+
+  useEffect(() => {
+    if (!session) return
     const onPopState = () => setLocation(currentLocation())
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
@@ -84,7 +89,8 @@ function App() {
     async function load() {
       try {
         const canManageUsers = authenticatedUser.roles.includes('admin')
-        const [list, taskList, documentList, templates, userList] = await Promise.all([api.getUniversities(), api.getTasks(), api.getDocuments(), api.getWorkflowTemplates(), canManageUsers ? api.getUsers() : Promise.resolve([])])
+        const canManageContent = canManageUsers || authenticatedUser.roles.includes('manager')
+        const [list, taskList, documentList, templates, userList] = await Promise.all([api.getUniversities(), api.getTasks(), api.getDocuments(), canManageContent ? api.getWorkflowTemplates() : Promise.resolve([]), canManageUsers ? api.getUsers() : Promise.resolve([])])
         if (cancelled) return
         setUniversities(list)
         setTasks(taskList)
@@ -112,6 +118,7 @@ function App() {
   }, [path, retry, session])
 
   if (!session) return <AuthPage onAuthenticated={setSession} />
+  const canManageContent = session.user.roles.includes('admin') || session.user.roles.includes('manager')
 
   async function saveStage(programId: number, stageId: number, update: WorkflowStageUpdate) {
     if (!details) throw new Error('Откройте карточку вуза заново')
@@ -128,7 +135,7 @@ function App() {
     setAllActivities(current => [...updated.activities, ...current.filter(activity => activity.universityId !== updated.university.id)])
   }
 
-  async function deleteStageAttachment(programId: number, stageId: number, attachmentId: number) {
+  async function deleteStageAttachment(programId: number, stageId: number, attachmentId: string) {
     if (!details) throw new Error('Откройте карточку вуза заново')
     const updated = await api.deleteStageAttachment(details.university.id, programId, stageId, attachmentId)
     setDetails(updated)
@@ -207,16 +214,18 @@ function App() {
   else if (error) content = <div className="content"><div className="loading card"><p role="alert">{error}</p><button className="outline-button" onClick={() => setRetry(value => value + 1)}>Повторить загрузку</button></div></div>
   else if (path === '/') content = <OverviewPage universities={universities} programs={allPrograms} activities={allActivities} tasks={tasks} onOpenUniversity={id => navigate(`/universities/${id}`)} onOpenUniversities={() => navigate('/universities')} onOpenPrograms={() => navigate('/programs')} onOpenTasks={() => navigate('/tasks')} onOpenAnalytics={() => navigate('/analytics')} />
   else if (path === '/profile') content = <ProfilePage currentUser={session.user} onOpenSettings={() => setSettingsSignal(value => value + 1)} />
-  else if (path === '/universities') content = <UniversitiesPage universities={universities} initialQuery={url.searchParams.get('search') ?? ''} onCreate={createUniversity} onOpen={id => navigate(`/universities/${id}`)} />
+  else if (path === '/universities') content = <UniversitiesPage universities={universities} canCreate={canManageContent} initialQuery={url.searchParams.get('search') ?? ''} onCreate={createUniversity} onOpen={id => navigate(`/universities/${id}`)} />
   else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onUploadStageAttachment={uploadStageAttachment} onDeleteStageAttachment={deleteStageAttachment} onCreateTask={createTask} onUpdateTask={updateTask} onOpenPrograms={() => navigate('/programs')} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
   else if (path === '/tasks') content = <div className="content"><div className="page-heading"><div><div className="eyebrow">РАБОЧИЙ ЦЕНТР</div><h1>Задачи</h1><p className="muted">Поручения по всем учебным заведениям и программам</p></div></div><TasksPanel tasks={tasks} universities={universities} programs={allPrograms} onCreate={createTask} onUpdate={updateTask} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /></div>
   else if (path === '/documents') content = <DocumentsPage documents={documents} programs={allPrograms} universities={universities} onCreate={createDocument} onUpdate={updateDocument} onDelete={deleteDocument} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/analytics') content = <AnalyticsPage universities={universities} programs={allPrograms} tasks={tasks} documents={documents} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} onOpenTasks={() => navigate('/tasks')} onOpenDocuments={() => navigate('/documents')} />
   else if (path === '/reports') content = <ReportsPage universities={universities} programs={allPrograms} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
-  else if (path === '/import') content = <ImportPage universities={universities} onImportUniversities={importUniversities} onImportPrograms={importPrograms} />
-  else if (path === '/workflows') content = <WorkflowsPage templates={workflowTemplates} universities={universities} programs={allPrograms} onCreate={createWorkflowTemplate} onUpdate={updateWorkflowTemplate} onDelete={deleteWorkflowTemplate} onApply={applyWorkflowTemplate} />
-  else if (path === '/users') content = <UsersPage users={users} universities={universities} onCreate={createUser} onUpdate={updateUser} />
-  else if (path === '/programs') content = <SectionPage section="programs" programs={allPrograms} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
+  else if (path === '/import') content = canManageContent ? <ImportPage universities={universities} onImportUniversities={importUniversities} onImportPrograms={importPrograms} /> : <div className="content"><div className="loading card"><p role="alert">Импорт доступен менеджерам и администраторам.</p></div></div>
+  else if (path === '/workflows') content = canManageContent ? <WorkflowsPage templates={workflowTemplates} universities={universities} programs={allPrograms} onCreate={createWorkflowTemplate} onUpdate={updateWorkflowTemplate} onDelete={deleteWorkflowTemplate} onApply={applyWorkflowTemplate} /> : <div className="content"><div className="loading card"><p role="alert">Управление процессами доступно менеджерам и администраторам.</p></div></div>
+  else if (path === '/users') content = session.user.roles.includes('admin')
+    ? <UsersPage users={users} universities={universities} onCreate={createUser} onUpdate={updateUser} />
+    : <div className="content"><div className="loading card"><p role="alert">Раздел доступен только администраторам.</p></div></div>
+  else if (path === '/programs') content = <SectionPage section="programs" canCreate={canManageContent} programs={allPrograms} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else content = <div className="content"><div className="loading card">Раздел не найден.</div></div>
 
   return <AppShell currentUser={session.user} onLogout={async () => { await logout(); setSession(null) }} settingsSignal={settingsSignal} taskCount={tasks.filter(task => task.status === 'open').length} path={path} navigate={navigate}>{content}</AppShell>
