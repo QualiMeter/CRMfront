@@ -4,7 +4,7 @@ import { Icon } from '../components/Icon'
 
 const blankUniversity: UniversityInput = { name: '', shortName: '', city: '', contactPerson: '', contactRole: '', status: 'Контакт найден' }
 
-export function UniversitiesPage({ universities, onOpen, onCreate, initialQuery = '' }: { universities: University[]; onOpen: (id: number) => void; onCreate: (input: UniversityInput) => Promise<number>; initialQuery?: string }) {
+export function UniversitiesPage({ universities, onOpen, onCreate, canCreate = false, initialQuery = '' }: { universities: University[]; onOpen: (id: number) => void; onCreate: (input: UniversityInput) => Promise<number>; canCreate?: boolean; initialQuery?: string }) {
   const [query, setQuery] = useState(initialQuery)
   useEffect(() => setQuery(initialQuery), [initialQuery])
   const [status, setStatus] = useState('')
@@ -25,7 +25,7 @@ export function UniversitiesPage({ universities, onOpen, onCreate, initialQuery 
   return <div className="content">
     <div className="page-heading">
       <div><div className="eyebrow">УПРАВЛЕНИЕ УЧЕБНЫМИ ЗАВЕДЕНИЯМИ</div><h1>Вузы</h1><p className="muted">Контроль текущих взаимодействий и образовательных программ</p></div>
-      <button className="primary-button" onClick={() => setEditorOpen(true)}><Icon name="plus" size={18} /> Добавить вуз</button>
+      {canCreate && <button className="primary-button" onClick={() => setEditorOpen(true)}><Icon name="plus" size={18} /> Добавить вуз</button>}
     </div>
 
     <section className="card universities-toolbar"><div className="list-search"><Icon name="search" size={17} /><input aria-label="Поиск учебного заведения" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Поиск по названию, городу или аббревиатуре" /></div><select className="toolbar-filter" aria-label="Статус взаимодействия" value={status} onChange={event => setStatus(event.target.value)}><option value="">Все статусы</option>{statuses.map(value => <option key={value} value={value}>{value}</option>)}</select></section>
