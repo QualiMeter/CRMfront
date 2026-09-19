@@ -34,6 +34,17 @@ const saveSession = (session: AuthSession | null) => {
   window.dispatchEvent(new CustomEvent('crm-auth-change', { detail: session }))
 }
 
+export async function syncCurrentUser() {
+  const current = getSession()
+  if (!current) return null
+  const response = await authorizedFetch(`${API_URL}/api/v1/auth/me`)
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(data.detail || data.message || `Ошибка ${response.status}`)
+  const next = { ...current, user: data as AuthUser }
+  saveSession(next)
+  return next
+}
+
 async function authRequest<T>(path: string, body: object): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -62,6 +73,8 @@ export async function register(input: { username: string; email: string; passwor
   return session
 }
 
+let refreshPromise: Promise<AuthSession> | null = null
+
 async function refreshSession(current: AuthSession) {
   const token = await authRequest<{ access_token: string; refresh_token: string; expires_in: number }>('/api/v1/auth/refresh', { refresh_token: current.refreshToken })
   const next = { ...current, accessToken: token.access_token, refreshToken: token.refresh_token, expiresAt: Date.now() + token.expires_in * 1000 }
@@ -69,15 +82,20 @@ async function refreshSession(current: AuthSession) {
   return next
 }
 
+function refreshOnce(current: AuthSession) {
+  if (!refreshPromise) refreshPromise = refreshSession(current).finally(() => { refreshPromise = null })
+  return refreshPromise
+}
+
 export async function authorizedFetch(url: string, init: RequestInit = {}, retry = true): Promise<Response> {
   let session = getSession()
   if (!session) throw new Error('Требуется авторизация')
   if (session.expiresAt <= Date.now() + 15_000) {
-    try { session = await refreshSession(session) } catch { saveSession(null); throw new Error('Сессия истекла. Войдите снова.') }
+    try { session = await refreshOnce(session) } catch { saveSession(null); throw new Error('Сессия истекла. Войдите снова.') }
   }
   const response = await fetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${session.accessToken}` } })
   if (response.status === 401 && retry) {
-    try { await refreshSession(session); return authorizedFetch(url, init, false) }
+    try { await refreshOnce(session); return authorizedFetch(url, init, false) }
     catch { saveSession(null); throw new Error('Сессия истекла. Войдите снова.') }
   }
   return response
@@ -88,4 +106,3 @@ export async function logout() {
   saveSession(null)
   if (session) await authRequest('/api/v1/auth/logout', { refresh_token: session.refreshToken }).catch(() => undefined)
 }
-
