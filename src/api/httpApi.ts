@@ -1,5 +1,5 @@
 import type { ApiClient, UniversityDetails } from './client'
-import { authorizedFetch } from './auth'
+import { authorizedFetch, getSession } from './auth'
 import type {
   Activity,
   CrmDocument,
@@ -10,6 +10,7 @@ import type {
   Program,
   ProgramInput,
   StageStatus,
+  StageAttachment,
   TaskInput,
   TaskUpdate,
   University,
@@ -71,6 +72,20 @@ const documentStatusFromApi = (value: unknown): DocumentStatus => {
 }
 
 const documentStatusToApi = (value: DocumentStatus) => value === 'review' ? 'approval' : value
+const defaultStatusLabels: Record<StageStatus, string> = { done: 'Выполнено', active: 'В процессе', pending: 'Предстоит', blocked: 'Требует внимания' }
+const statusMarker = /\n\[crm-status-labels:([^\]]+)\]$/
+
+function encodeTemplateDescription(description: string, labels: Record<StageStatus, string>) {
+  return `${description.trim()}\n[crm-status-labels:${encodeURIComponent(JSON.stringify(labels))}]`
+}
+
+function decodeTemplateDescription(value: unknown) {
+  const raw = text(value)
+  const match = raw.match(statusMarker)
+  if (!match) return { description: raw, labels: defaultStatusLabels }
+  try { return { description: raw.replace(statusMarker, ''), labels: { ...defaultStatusLabels, ...JSON.parse(decodeURIComponent(match[1])) } } }
+  catch { return { description: raw.replace(statusMarker, ''), labels: defaultStatusLabels } }
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController()
@@ -95,6 +110,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } finally {
     window.clearTimeout(timeout)
   }
+}
+
+async function uploadFile<T>(path: string, file: File): Promise<T> {
+  const form = new FormData()
+  form.append('file', file)
+  const response = await authorizedFetch(`${API_URL}${path}`, { method: 'POST', body: form })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(data.detail || data.message || `Backend вернул ${response.status}`)
+  return data as T
 }
 
 async function table(name: string): Promise<Row[]> {
@@ -141,7 +165,7 @@ function mapDocument(row: Row, users: Row[]): CrmDocument {
   }
 }
 
-function mapWorkflowStage(row: Row, universityId: number, programId: number): WorkflowStage {
+function mapWorkflowStage(row: Row, universityId: number, programId: number, attachments: StageAttachment[] = []): WorkflowStage {
   const due = dateOnly(row.due_at)
   return {
     id: number(row.id),
@@ -154,7 +178,7 @@ function mapWorkflowStage(row: Row, universityId: number, programId: number): Wo
     date: due || undefined,
     owner: row.responsible_user_id ? `Пользователь #${number(row.responsible_user_id)}` : undefined,
     note: text(row.comment) || undefined,
-    attachments: [],
+    attachments,
   }
 }
 
@@ -163,7 +187,47 @@ async function getInteractions(universityId?: number): Promise<Row[]> {
   return universityId ? rows.filter(row => number(row.university_id) === universityId) : rows
 }
 
-async function buildPrograms(universityId: number, rows: Row[], interactions: Row[]): Promise<Program[]> {
+async function loadStageAttachments(stageIds: number[], users: Row[]) {
+  const links = (await optionalTable('stage_attachments')).filter(link => stageIds.includes(number(link.stage_instance_id)))
+  const result = new Map<number, StageAttachment[]>()
+  await Promise.all(links.map(async link => {
+    const fileId = text(link.file_id)
+    if (!fileId) return
+    const file = await request<Row>(`/api/v1/files/${fileId}`)
+    let url = '#'
+    try {
+      const response = await authorizedFetch(`${API_URL}/api/v1/files/${fileId}/download`)
+      if (response.ok) url = URL.createObjectURL(await response.blob())
+    } catch { /* Metadata remains visible even if the binary is temporarily unavailable. */ }
+    const uploader = users.find(user => number(user.id) === number(file.uploaded_by))
+    const stageId = number(link.stage_instance_id)
+    const item: StageAttachment = {
+      id: fileId,
+      stageId,
+      name: text(file.original_name, 'Файл'),
+      size: number(file.size_bytes),
+      mimeType: text(file.content_type, 'application/octet-stream'),
+      uploadedAt: text(file.created_at, text(link.created_at)),
+      uploadedBy: text(uploader?.full_name, 'Пользователь'),
+      url,
+    }
+    result.set(stageId, [...(result.get(stageId) ?? []), item])
+  }))
+  return result
+}
+
+async function loadStageNotes(stageIds: number[]) {
+  const result = new Map<number, string>()
+  await Promise.all(stageIds.map(async stageId => {
+    const comments = await request<Row[]>(`/api/v1/comments/stage/${stageId}`)
+    const latest = comments.filter(comment => !comment.deleted_at)
+      .sort((a, b) => text(b.created_at).localeCompare(text(a.created_at)))[0]
+    if (latest) result.set(stageId, text(latest.body))
+  }))
+  return result
+}
+
+async function buildPrograms(universityId: number, rows: Row[], interactions: Row[], users: Row[]): Promise<Program[]> {
   const [products, links] = await Promise.all([optionalTable('it_products'), optionalTable('program_products')])
   return Promise.all(rows.map(async row => {
     const programId = number(row.id)
@@ -175,7 +239,12 @@ async function buildPrograms(universityId: number, rows: Row[], interactions: Ro
       ?? links.find(link => number(link.program_id) === programId)
     const product = products.find(item => number(item.id) === number(productLink?.product_id))
       ?? products.find(item => number(item.id) === number(interaction?.product_id))
-    const workflow = workflowRows.map(stage => mapWorkflowStage(stage, universityId, programId))
+    const stageIds = workflowRows.map(stage => number(stage.id))
+    const [attachments, notes] = await Promise.all([loadStageAttachments(stageIds, users), loadStageNotes(stageIds)])
+    const workflow = workflowRows.map(stage => ({
+      ...mapWorkflowStage(stage, universityId, programId, attachments.get(number(stage.id))),
+      note: notes.get(number(stage.id)),
+    }))
     const currentStage = workflow.find(stage => stage.status === 'active')
       ?? workflow.find(stage => stage.status !== 'done')
     return {
@@ -193,38 +262,30 @@ async function buildPrograms(universityId: number, rows: Row[], interactions: Ro
   }))
 }
 
-function buildActivities(universityId: number, programs: Program[], tasks: CrmTask[]): Activity[] {
-  const result: Activity[] = []
-  for (const task of tasks.slice(0, 3)) result.push({
-    id: 100_000 + task.id,
-    universityId,
-    time: task.createdAt ? new Date(task.createdAt).toLocaleDateString('ru-RU') : 'Недавно',
-    title: task.status === 'done' ? 'Задача выполнена' : 'Задача в работе',
-    description: task.title,
-    type: task.status === 'done' ? 'success' : 'info',
-  })
-  for (const program of programs.slice(0, 2)) result.push({
-    id: 200_000 + program.id,
-    universityId,
-    time: 'Текущий статус',
-    title: program.name,
-    description: program.stage,
-    type: program.workflow.some(stage => stage.status === 'blocked') ? 'warning' : 'info',
-  })
-  return result
+function mapActivity(row: Row): Activity {
+  const kind = text(row.kind).toLowerCase()
+  return {
+    id: number(row.id),
+    universityId: number(row.university_id),
+    time: text(row.created_at) ? new Date(text(row.created_at)).toLocaleString('ru-RU') : 'Недавно',
+    title: text(row.title, 'Событие'),
+    description: text(row.description),
+    type: kind.includes('error') || kind.includes('block') ? 'warning' : kind.includes('complete') || kind.includes('done') ? 'success' : 'info',
+  }
 }
 
 async function remoteUniversityDetails(id: number): Promise<UniversityDetails> {
-  const [rawUniversity, contacts, programRows, interactions, taskRows, documentRows, users] = await Promise.all([
+  const [rawUniversity, contacts, programRows, interactions, taskRows, documentRows, activityRows, users] = await Promise.all([
     request<Row>(`/api/v1/universities/${id}`),
     request<Row[]>('/api/v1/university-contacts?limit=500').then(rows => rows.filter(row => number(row.university_id) === id)),
     request<Row[]>('/api/v1/programs?limit=500').then(rows => rows.filter(row => number(row.university_id) === id)),
     getInteractions(id),
     request<Row[]>('/api/v1/tasks?limit=500').then(rows => rows.filter(row => number(row.university_id) === id)),
     request<Row[]>('/api/v1/documents?limit=500').then(rows => rows.filter(row => number(row.university_id) === id)),
+    request<Row[]>('/api/v1/activities?limit=500').then(rows => rows.filter(row => number(row.university_id) === id)),
     optionalTable('users'),
   ])
-  const programs = await buildPrograms(id, programRows, interactions)
+  const programs = await buildPrograms(id, programRows, interactions, users)
   const tasks = taskRows.map(row => mapTask(row, users))
   const documents = documentRows.map(row => mapDocument(row, users))
   const primaryContact = contacts.find(contact => Boolean(contact.is_primary)) ?? contacts[0]
@@ -246,7 +307,7 @@ async function remoteUniversityDetails(id: number): Promise<UniversityDetails> {
     streams: programs.reduce((sum, program) => sum + program.streams, 0),
     progress,
   }
-  return { university, programs, tasks, documents, activities: buildActivities(id, programs, tasks) }
+  return { university, programs, tasks, documents, activities: activityRows.map(mapActivity) }
 }
 
 async function remoteUniversities(): Promise<University[]> {
@@ -291,6 +352,8 @@ async function syncUniversityAccess(userId: number, universityIds: number[], isM
   await Promise.all(current.filter(item => !wanted.has(number(item.university_id))).map(item =>
     request<void>(`/api/v1/user-university-access/${userId}/${number(item.university_id)}`, { method: 'DELETE' })))
   const existing = new Set(current.map(item => number(item.university_id)))
+  await Promise.all(current.filter(item => wanted.has(number(item.university_id)) && Boolean(item.is_manager) !== isManager).map(item =>
+    request(`/api/v1/user-university-access/${userId}/${number(item.university_id)}`, { method: 'PATCH', body: JSON.stringify({ is_manager: isManager }) })))
   await Promise.all(universityIds.filter(id => !existing.has(id)).map(universityId => createRow('user_university_access', {
     user_id: userId, university_id: universityId, is_manager: isManager,
   })))
@@ -301,17 +364,19 @@ async function remoteWorkflowTemplates(): Promise<WorkflowTemplate[]> {
     request<Row[]>('/api/v1/workflow-templates?limit=500'),
     request<Row[]>('/api/v1/workflow-template-stages?limit=500'),
   ])
-  return templates.map(template => ({
+  return templates.map(template => {
+    const decoded = decodeTemplateDescription(template.description)
+    return {
     id: number(template.id),
     name: text(template.name, 'Процесс'),
-    description: text(template.description),
+    description: decoded.description,
     isSystem: Boolean(template.is_default),
     updatedAt: text(template.updated_at, text(template.created_at, new Date(0).toISOString())),
     stages: stages.filter(stage => number(stage.template_id) === number(template.id))
       .sort((a, b) => number(a.position) - number(b.position))
       .map(stage => ({ id: number(stage.id), order: number(stage.position), title: text(stage.name, 'Этап'), shortTitle: text(stage.code, text(stage.name, 'Этап')) })),
-    statusLabels: { done: 'Выполнено', active: 'В процессе', pending: 'Предстоит', blocked: 'Требует внимания' },
-  }))
+    statusLabels: decoded.labels,
+  }})
 }
 
 export const httpApi: ApiClient = {
@@ -340,10 +405,45 @@ export const httpApi: ApiClient = {
   },
 
   async getWorkflowTemplates() { return remoteWorkflowTemplates() },
-  async createWorkflowTemplate() { throw new Error('Создание шаблонов workflow ещё не подключено к backend') },
-  async updateWorkflowTemplate() { throw new Error('Изменение шаблонов workflow ещё не подключено к backend') },
-  async deleteWorkflowTemplate() { throw new Error('Удаление шаблонов workflow ещё не подключено к backend') },
-  async applyWorkflowTemplate() { throw new Error('Применение шаблонов workflow ещё не подключено к backend') },
+  async createWorkflowTemplate(input) {
+    const row = await createRow<Row>('workflow_templates', { name: input.name, description: encodeTemplateDescription(input.description, input.statusLabels), is_default: false, is_active: true, version: 1, created_by: getSession()?.user.id ?? null })
+    await Promise.all(input.stages.map((stage, index) => createRow('workflow_template_stages', {
+      template_id: number(row.id), position: index + 1, code: stage.shortTitle, name: stage.title, is_optional: false,
+    })))
+    return (await remoteWorkflowTemplates()).find(item => item.id === number(row.id))!
+  },
+  async updateWorkflowTemplate(id, input) {
+    await patchRow('workflow_templates', id, { name: input.name, description: encodeTemplateDescription(input.description, input.statusLabels) })
+    const currentStages = (await table('workflow_template_stages')).filter(stage => number(stage.template_id) === id).sort((a, b) => number(a.position) - number(b.position))
+    await Promise.all(input.stages.map((stage, index) => currentStages[index]
+      ? patchRow('workflow_template_stages', number(currentStages[index].id), { position: index + 1, code: stage.shortTitle, name: stage.title })
+      : createRow('workflow_template_stages', { template_id: id, position: index + 1, code: stage.shortTitle, name: stage.title, is_optional: false })))
+    await Promise.all(currentStages.slice(input.stages.length).map(stage => request<void>(`/api/v1/workflow-template-stages/${number(stage.id)}`, { method: 'DELETE' })))
+    return (await remoteWorkflowTemplates()).find(item => item.id === id)!
+  },
+  async deleteWorkflowTemplate(id) {
+    const template = (await remoteWorkflowTemplates()).find(item => item.id === id)
+    if (!template) throw new Error('Шаблон не найден')
+    await request<void>(`/api/v1/workflow-templates/${id}`, { method: 'DELETE' })
+    return template
+  },
+  async applyWorkflowTemplate(universityId, programId, templateId) {
+    const template = (await remoteWorkflowTemplates()).find(item => item.id === templateId)
+    if (!template) throw new Error('Шаблон не найден')
+    let interaction = (await getInteractions(universityId)).find(item => number(item.program_id) === programId)
+    if (!interaction) {
+      interaction = await createRow<Row>('interactions', { university_id: universityId, program_id: programId, template_id: templateId, name: template.name, status: 'active' })
+    } else {
+      interaction = await patchRow<Row>('interactions', number(interaction.id), { template_id: templateId })
+    }
+    const currentStages = (await table('workflow_stage_instances')).filter(stage => number(stage.interaction_id) === number(interaction!.id))
+    await Promise.all(currentStages.map(stage => request<void>(`/api/v1/workflow-stage-instances/${number(stage.id)}`, { method: 'DELETE' })))
+    await Promise.all(template.stages.map((stage, index) => createRow('workflow_stage_instances', {
+      interaction_id: number(interaction!.id), template_stage_id: stage.id, position: index + 1, code: stage.shortTitle,
+      name: stage.title, status: index === 0 ? 'in_progress' : 'pending', is_optional: false,
+    })))
+    return remoteUniversityDetails(universityId)
+  },
 
   async getUniversities() {
     return remoteUniversities()
@@ -378,7 +478,7 @@ export const httpApi: ApiClient = {
     const payload: Row = {}
     if (update.title !== undefined) payload.title = update.title
     if (update.description !== undefined) payload.description = update.description
-    if (update.programId !== undefined) payload.program_id = update.programId
+    if ('programId' in update) payload.program_id = update.programId ?? null
     if (update.dueDate !== undefined) payload.due_at = `${update.dueDate}T12:00:00Z`
     if (update.priority !== undefined) payload.priority = update.priority
     if (update.status !== undefined) payload.status = update.status
@@ -405,17 +505,20 @@ export const httpApi: ApiClient = {
       comment: input.note,
       current_version: 0,
     })
-    return mapDocument(row, await optionalTable('users'))
+    if (input.file) await uploadFile(`/api/v1/documents/${number(row.id)}/versions/upload`, input.file)
+    const refreshed = await request<Row>(`/api/v1/documents/${number(row.id)}`)
+    return mapDocument(refreshed, await optionalTable('users'))
   },
   async updateDocument(id: number, update: DocumentUpdate) {
     const payload: Row = {}
-    if (update.programId !== undefined) payload.program_id = update.programId
+    if ('programId' in update) payload.program_id = update.programId ?? null
     if (update.category !== undefined) payload.category = update.category
     if (update.status !== undefined) payload.status = documentStatusToApi(update.status)
     if (update.note !== undefined) payload.comment = update.note
     if (update.owner !== undefined) payload.owner_id = await findUserId(update.owner)
-    const row = await patchRow<Row>('documents', id, payload)
-    return mapDocument(row, await optionalTable('users'))
+    if (Object.keys(payload).length) await patchRow<Row>('documents', id, payload)
+    if (update.file) await uploadFile(`/api/v1/documents/${id}/versions/upload`, update.file)
+    return mapDocument(await request<Row>(`/api/v1/documents/${id}`), await optionalTable('users'))
   },
   async deleteDocument(id: number) {
     const documents = await this.getDocuments()
@@ -452,6 +555,7 @@ export const httpApi: ApiClient = {
       applications_count: input.applications,
       students_count: input.students,
       streams_count: input.streams,
+      demand_score: input.demand,
     })
     await createRow('program_products', { program_id: number(program.id), product_id: number(product.id), is_primary: true })
     return remoteUniversityDetails(input.universityId)
@@ -461,17 +565,25 @@ export const httpApi: ApiClient = {
     const interaction = interactions.find(item => number(item.program_id) === programId)
     if (!interaction) throw new Error('Для программы ещё не создано взаимодействие (ИТ-проект)')
     const payload: Row = { status: stageStatusToApi(update.status) }
-    if (update.date) payload.due_at = `${update.date}T12:00:00Z`
-    if (update.owner) payload.responsible_user_id = await findUserId(update.owner)
+    payload.due_at = update.date ? `${update.date}T12:00:00Z` : null
+    payload.responsible_user_id = update.owner ? await findUserId(update.owner) : null
     await request(`/api/v1/workflow-stage-instances/${stageId}`, {
       method: 'PATCH', body: JSON.stringify(payload),
     })
+    const comments = await request<Row[]>(`/api/v1/comments/stage/${stageId}`)
+    const latest = comments.filter(comment => !comment.deleted_at).sort((a, b) => text(b.created_at).localeCompare(text(a.created_at)))[0]
+    const nextNote = (update.note ?? '').trim()
+    if (nextNote && text(latest?.body) !== nextNote) await request(`/api/v1/comments/stage/${stageId}`, { method: 'POST', body: JSON.stringify({ body: nextNote }) })
+    if (!nextNote && latest) await request<void>(`/api/v1/comments/${number(latest.id)}`, { method: 'DELETE' })
     return remoteUniversityDetails(universityId)
   },
-  async uploadStageAttachment() {
-    throw new Error('Загрузка файлов появится после добавления файлового endpoint на backend')
+  async uploadStageAttachment(universityId, _programId, stageId, file) {
+    const uploaded = await uploadFile<Row>('/api/v1/files/upload', file)
+    await createRow('stage_attachments', { stage_instance_id: stageId, file_id: text(uploaded.id), attached_by: getSession()?.user.id ?? null })
+    return remoteUniversityDetails(universityId)
   },
-  async deleteStageAttachment() {
-    throw new Error('Удаление файлов появится после добавления файлового endpoint на backend')
+  async deleteStageAttachment(universityId, _programId, stageId, attachmentId) {
+    await request<void>(`/api/v1/stage-attachments/${stageId}/${attachmentId}`, { method: 'DELETE' })
+    return remoteUniversityDetails(universityId)
   },
 }
