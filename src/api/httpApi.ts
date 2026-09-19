@@ -1,5 +1,6 @@
 import type { ApiClient, UniversityDetails } from './client'
 import { mockApi } from '../mock/mockApi'
+import { authorizedFetch } from './auth'
 import type {
   Activity,
   CrmDocument,
@@ -72,7 +73,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
   try {
-    const response = await fetch(`${API_URL}${path}`, {
+    const response = await authorizedFetch(`${API_URL}${path}`, {
       ...init,
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json', ...init?.headers },
@@ -94,7 +95,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function table(name: string): Promise<Row[]> {
-  return request<Row[]>(`/api/v1/data/${encodeURIComponent(name)}?limit=500`)
+  return request<Row[]>(`/api/v1/${name.replaceAll('_', '-')}?limit=500`)
 }
 
 async function optionalTable(name: string): Promise<Row[]> {
@@ -155,8 +156,8 @@ function mapWorkflowStage(row: Row, universityId: number, programId: number): Wo
 }
 
 async function getInteractions(universityId?: number): Promise<Row[]> {
-  const suffix = universityId ? `?university_id=${universityId}&limit=200` : '?limit=200'
-  return request<Row[]>(`/api/v1/interactions${suffix}`)
+  const rows = await request<Row[]>('/api/v1/interactions?limit=500')
+  return universityId ? rows.filter(row => number(row.university_id) === universityId) : rows
 }
 
 async function buildPrograms(universityId: number, rows: Row[], interactions: Row[]): Promise<Program[]> {
@@ -165,7 +166,7 @@ async function buildPrograms(universityId: number, rows: Row[], interactions: Ro
     const programId = number(row.id)
     const interaction = interactions.find(item => number(item.program_id) === programId)
     const workflowRows = interaction
-      ? await request<Row[]>(`/api/v1/interactions/${number(interaction.id)}/workflow`)
+      ? (await request<Row[]>('/api/v1/workflow-stage-instances?limit=500')).filter(stage => number(stage.interaction_id) === number(interaction.id))
       : []
     const productLink = links.find(link => number(link.program_id) === programId && Boolean(link.is_primary))
       ?? links.find(link => number(link.program_id) === programId)
@@ -213,11 +214,11 @@ function buildActivities(universityId: number, programs: Program[], tasks: CrmTa
 async function remoteUniversityDetails(id: number): Promise<UniversityDetails> {
   const [rawUniversity, contacts, programRows, interactions, taskRows, documentRows, users] = await Promise.all([
     request<Row>(`/api/v1/universities/${id}`),
-    request<Row[]>(`/api/v1/universities/${id}/contacts`),
-    request<Row[]>(`/api/v1/universities/${id}/programs`),
+    request<Row[]>('/api/v1/university-contacts?limit=500').then(rows => rows.filter(row => number(row.university_id) === id)),
+    request<Row[]>('/api/v1/programs?limit=500').then(rows => rows.filter(row => number(row.university_id) === id)),
     getInteractions(id),
-    request<Row[]>(`/api/v1/tasks?university_id=${id}&limit=200`),
-    request<Row[]>(`/api/v1/documents?university_id=${id}&limit=200`),
+    request<Row[]>('/api/v1/tasks?limit=500').then(rows => rows.filter(row => number(row.university_id) === id)),
+    request<Row[]>('/api/v1/documents?limit=500').then(rows => rows.filter(row => number(row.university_id) === id)),
     optionalTable('users'),
   ])
   const programs = await buildPrograms(id, programRows, interactions)
@@ -246,31 +247,8 @@ async function remoteUniversityDetails(id: number): Promise<UniversityDetails> {
 }
 
 async function remoteUniversities(): Promise<University[]> {
-  const rows = await request<Row[]>('/api/v1/dashboard/universities')
-  return Promise.all(rows.map(async row => {
-    const id = number(row.id)
-    let progress = 0
-    try {
-      const interactions = await getInteractions(id)
-      const values = await Promise.all(interactions.map(item =>
-        request<Row>(`/api/v1/dashboard/interactions/${number(item.id)}/progress`)))
-      if (values.length) progress = Math.round(values.reduce((sum, item) => sum + number(item.progress_percent), 0) / values.length)
-    } catch { /* Other university data can still be displayed. */ }
-    return {
-      id,
-      name: text(row.name, 'Учебное заведение'),
-      shortName: text(row.short_name, 'Вуз'),
-      city: text(row.city),
-      contactPerson: 'Смотрите карточку вуза',
-      contactRole: 'Контактное лицо',
-      status: universityStatus[text(row.status)] ?? text(row.status, 'Без статуса'),
-      programsCount: number(row.programs_count),
-      activePrograms: number(row.active_interactions),
-      students: number(row.students_count),
-      streams: number(row.streams_count),
-      progress,
-    }
-  }))
+  const rows = await request<Row[]>('/api/v1/universities?limit=500')
+  return Promise.all(rows.map(row => remoteUniversityDetails(number(row.id)).then(details => details.university)))
 }
 
 async function findUserId(name: string): Promise<number | null> {
@@ -279,11 +257,11 @@ async function findUserId(name: string): Promise<number | null> {
 }
 
 async function createRow<T extends Row>(name: string, payload: Row): Promise<T> {
-  return request<T>(`/api/v1/data/${encodeURIComponent(name)}`, { method: 'POST', body: JSON.stringify(payload) })
+  return request<T>(`/api/v1/${name.replaceAll('_', '-')}`, { method: 'POST', body: JSON.stringify(payload) })
 }
 
 async function patchRow<T extends Row>(name: string, id: number, payload: Row): Promise<T> {
-  return request<T>(`/api/v1/data/${encodeURIComponent(name)}/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+  return request<T>(`/api/v1/${name.replaceAll('_', '-')}/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
 }
 
 export const httpApi: ApiClient = {
@@ -298,18 +276,16 @@ export const httpApi: ApiClient = {
   applyWorkflowTemplate: mockApi.applyWorkflowTemplate,
 
   async getUniversities() {
-    try { return await remoteUniversities() }
-    catch (error) { console.warn('Remote universities unavailable, mock fallback is active.', error); return mockApi.getUniversities() }
+    return remoteUniversities()
   },
   async getUniversity(id) {
-    try { return await remoteUniversityDetails(id) }
-    catch (error) { console.warn('Remote university unavailable, mock fallback is active.', error); return mockApi.getUniversity(id) }
+    return remoteUniversityDetails(id)
   },
   async getTasks() {
     try {
       const [rows, users] = await Promise.all([request<Row[]>('/api/v1/tasks?limit=200'), optionalTable('users')])
       return rows.map(row => mapTask(row, users))
-    } catch (error) { console.warn('Remote tasks unavailable, mock fallback is active.', error); return mockApi.getTasks() }
+    } catch (error) { throw error }
   },
   async createTask(input: TaskInput) {
     const assigneeId = await findUserId(input.owner)
@@ -344,7 +320,7 @@ export const httpApi: ApiClient = {
     try {
       const [rows, users] = await Promise.all([request<Row[]>('/api/v1/documents?limit=200'), optionalTable('users')])
       return rows.map(row => mapDocument(row, users))
-    } catch (error) { console.warn('Remote documents unavailable, mock fallback is active.', error); return mockApi.getDocuments() }
+    } catch (error) { throw error }
   },
   async createDocument(input: DocumentInput) {
     const ownerId = await findUserId(input.owner)
@@ -375,7 +351,7 @@ export const httpApi: ApiClient = {
     const documents = await this.getDocuments()
     const document = documents.find(item => item.id === id)
     if (!document) throw new Error('Документ не найден')
-    await request<void>(`/api/v1/data/documents/${id}`, { method: 'DELETE' })
+    await request<void>(`/api/v1/documents/${id}`, { method: 'DELETE' })
     return document
   },
   async createUniversity(input: UniversityInput) {
@@ -417,7 +393,7 @@ export const httpApi: ApiClient = {
     const payload: Row = { status: stageStatusToApi(update.status) }
     if (update.date) payload.due_at = `${update.date}T12:00:00Z`
     if (update.owner) payload.responsible_user_id = await findUserId(update.owner)
-    await request(`/api/v1/interactions/${number(interaction.id)}/workflow/${stageId}`, {
+    await request(`/api/v1/workflow-stage-instances/${stageId}`, {
       method: 'PATCH', body: JSON.stringify(payload),
     })
     return remoteUniversityDetails(universityId)
@@ -429,4 +405,3 @@ export const httpApi: ApiClient = {
     throw new Error('Удаление файлов появится после добавления файлового endpoint на backend')
   },
 }
-

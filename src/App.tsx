@@ -16,6 +16,8 @@ import { ReportsPage } from './pages/ReportsPage'
 import { ImportPage } from './pages/ImportPage'
 import { WorkflowsPage } from './pages/WorkflowsPage'
 import { UsersPage } from './pages/UsersPage'
+import { AuthPage } from './pages/AuthPage'
+import { getSession, logout, type AuthSession } from './api/auth'
 import type {
   CrmDocument,
   CrmTask,
@@ -37,6 +39,7 @@ import type {
 const currentLocation = () => window.location.pathname + window.location.search
 
 function App() {
+  const [session, setSession] = useState<AuthSession | null>(() => getSession())
   const [location, setLocation] = useState(currentLocation)
   const [universities, setUniversities] = useState<University[]>([])
   const [details, setDetails] = useState<UniversityDetails | null>(null)
@@ -59,6 +62,13 @@ function App() {
     setLocation(currentLocation())
   }
   useEffect(() => {
+    const syncAuth = (event: Event) => setSession((event as CustomEvent<AuthSession | null>).detail ?? getSession())
+    window.addEventListener('crm-auth-change', syncAuth)
+    return () => window.removeEventListener('crm-auth-change', syncAuth)
+  }, [])
+
+  useEffect(() => {
+    if (!session) return
     const onPopState = () => setLocation(currentLocation())
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
@@ -96,7 +106,9 @@ function App() {
     }
     void load()
     return () => { cancelled = true }
-  }, [path, retry])
+  }, [path, retry, session])
+
+  if (!session) return <AuthPage onAuthenticated={setSession} />
 
   async function saveStage(programId: number, stageId: number, update: WorkflowStageUpdate) {
     if (!details) throw new Error('Откройте карточку вуза заново')
@@ -204,7 +216,7 @@ function App() {
   else if (path === '/programs') content = <SectionPage section="programs" programs={allPrograms} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else content = <div className="content"><div className="loading card">Раздел не найден.</div></div>
 
-  return <AppShell settingsSignal={settingsSignal} taskCount={tasks.filter(task => task.status === 'open').length} path={path} navigate={navigate}>{content}</AppShell>
+  return <AppShell currentUser={session.user} onLogout={async () => { await logout(); setSession(null) }} settingsSignal={settingsSignal} taskCount={tasks.filter(task => task.status === 'open').length} path={path} navigate={navigate}>{content}</AppShell>
 }
 
 export default App

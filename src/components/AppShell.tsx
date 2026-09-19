@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Icon } from './Icon'
 import { getProfile, profileInitials, PROFILE_EVENT, type CrmProfile } from '../profile'
+import type { AuthUser } from '../api/auth'
 
 const navItems = [
   { label: 'Обзор', icon: 'grid' as const, path: '/' },
@@ -22,7 +23,7 @@ function breadcrumb(path: string) {
   return path.startsWith('/universities/') ? 'Карточка вуза' : map[path] ?? 'Раздел'
 }
 
-export function AppShell({ children, path, navigate, taskCount, settingsSignal = 0 }: { taskCount: number; children: ReactNode; path: string; navigate: (path: string) => void; settingsSignal?: number }) {
+export function AppShell({ children, path, navigate, taskCount, settingsSignal = 0, currentUser, onLogout }: { taskCount: number; children: ReactNode; path: string; navigate: (path: string) => void; settingsSignal?: number; currentUser: AuthUser; onLogout: () => Promise<void> }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -33,7 +34,8 @@ export function AppShell({ children, path, navigate, taskCount, settingsSignal =
   const [search, setSearch] = useState('')
   const menuButton = useRef<HTMLButtonElement>(null)
   const profileMenuRef = useRef<HTMLDivElement>(null)
-  const initials = profileInitials(profile.name)
+  const displayName = currentUser.full_name || profile.name
+  const initials = profileInitials(displayName)
 
   useEffect(() => { setMenuOpen(false); setNotificationsOpen(false); setProfileMenuOpen(false) }, [path])
   useEffect(() => { if (settingsSignal > 0) setSettingsOpen(true) }, [settingsSignal])
@@ -92,12 +94,13 @@ export function AppShell({ children, path, navigate, taskCount, settingsSignal =
       <div className="sidebar-bottom">
         <button className="nav-item" onClick={() => setSettingsOpen(true)}><Icon name="settings" size={19} /><span>Настройки</span></button>
         <div className="user-card" ref={profileMenuRef}>
-          <button className="user-main-button" onClick={() => navigate('/profile')} aria-label="Открыть мой профиль"><div className="avatar">{initials}</div><div className="user-meta"><strong>{profile.name}</strong><span>{profile.role}</span></div></button>
+          <button className="user-main-button" onClick={() => navigate('/profile')} aria-label="Открыть мой профиль"><div className="avatar">{initials}</div><div className="user-meta"><strong>{displayName}</strong><span>{currentUser.roles.join(', ') || 'Пользователь'}</span></div></button>
           <button className="user-more-button" aria-label="Меню профиля" aria-expanded={profileMenuOpen} onClick={() => setProfileMenuOpen(open => !open)}><Icon name="more" size={18} /></button>
           {profileMenuOpen && <div className="profile-menu" role="menu">
             <button role="menuitem" onClick={() => navigate('/profile')}><span className="profile-menu-icon">{initials}</span><span><strong>Мой профиль</strong><small>{profile.email}</small></span></button>
             <button role="menuitem" onClick={() => { setProfileMenuOpen(false); setSettingsOpen(true) }}><Icon name="settings" size={17} /><span><strong>Настройки интерфейса</strong><small>Вид и демо-подсказки</small></span></button>
             <button role="menuitem" onClick={() => { toggleCompact(); setProfileMenuOpen(false) }}><Icon name="grid" size={17} /><span><strong>Компактный режим</strong><small>{compact ? 'Сейчас включён' : 'Сейчас выключен'}</small></span><b className={`menu-switch ${compact ? 'on' : ''}`} aria-hidden="true" /> </button>
+            <button role="menuitem" onClick={() => void onLogout()}><Icon name="arrow" size={17} /><span><strong>Выйти</strong><small>{currentUser.email}</small></span></button>
           </div>}
         </div>
       </div>
