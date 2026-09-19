@@ -16,7 +16,7 @@ export function UniversityDetailsPage({ data, universities, onSwitch, programId,
   onSelectProgram: (id: number) => void
   onSaveStage: (programId: number, stageId: number, update: WorkflowStageUpdate) => Promise<void>
   onUploadStageAttachment: (programId: number, stageId: number, file: File) => Promise<void>
-  onDeleteStageAttachment: (programId: number, stageId: number, attachmentId: number) => Promise<void>
+  onDeleteStageAttachment: (programId: number, stageId: number, attachmentId: string) => Promise<void>
   onOpenPrograms: () => void
 }) {
   const [createSignal, setCreateSignal] = useState(0)
