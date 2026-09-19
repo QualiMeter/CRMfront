@@ -132,7 +132,7 @@ function DocumentStatusBadge({ status }: { status: DocumentStatus }) {
 
 function DocumentUploadModal({ universities, programs, onClose, onSave }: { universities: University[]; programs: Program[]; onClose: () => void; onSave: (input: DocumentInput) => Promise<void> }) {
   const [file, setFile] = useState<File | null>(null)
-  const [draft, setDraft] = useState<Omit<DocumentInput, 'name' | 'size' | 'mimeType'>>({ universityId: universities[0]?.id ?? 0, programId: undefined, category: 'agreement', owner: 'Петров А.А.', status: 'review', note: '' })
+  const [draft, setDraft] = useState<Omit<DocumentInput, 'name' | 'size' | 'mimeType' | 'file'>>({ universityId: universities[0]?.id ?? 0, programId: undefined, category: 'agreement', owner: '', status: 'review', note: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const availablePrograms = programs.filter(program => program.universityId === draft.universityId)
@@ -141,8 +141,9 @@ function DocumentUploadModal({ universities, programs, onClose, onSave }: { univ
   async function submit(event: FormEvent) {
     event.preventDefault(); if (saving) return
     if (!file) { setError('Выберите файл'); return }
+    if (file.size > 25 * 1024 * 1024) { setError('Файл превышает ограничение 25 МБ'); return }
     setSaving(true); setError('')
-    try { await onSave({ ...draft, name: file.name, size: formatFileSize(file), mimeType: file.type || 'application/octet-stream' }) }
+    try { await onSave({ ...draft, file, name: file.name, size: formatFileSize(file), mimeType: file.type || 'application/octet-stream' }) }
     catch (error) { setError(error instanceof Error ? error.message : 'Не удалось загрузить документ') }
     finally { setSaving(false) }
   }
@@ -156,14 +157,15 @@ function DocumentUploadModal({ universities, programs, onClose, onSave }: { univ
       <label>Ответственный<input required maxLength={120} value={draft.owner} onChange={(event: ChangeEvent<HTMLInputElement>) => setDraft(current => ({ ...current, owner: event.target.value }))}/></label>
       <label>Комментарий<textarea rows={3} maxLength={2000} value={draft.note} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDraft(current => ({ ...current, note: event.target.value }))} placeholder="Например: что нужно проверить или согласовать" /></label>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <p className="demo-note">В демо сохраняются метаданные файла. Реальный файл будет уходить в backend-хранилище.</p>
+      <p className="demo-note">Файл и его метаданные будут сохранены в backend-хранилище.</p>
       <div className="modal-actions"><button type="button" className="task-action" onClick={onClose}>Отмена</button><button className="primary-button" type="submit">{saving ? 'Загрузка…' : 'Загрузить'}</button></div>
     </fieldset></form>
   </section></div>
 }
 
 function DocumentDetailsModal({ document, programs, universities, onClose, onSave, onDelete, onOpenUniversity }: { document: CrmDocument; programs: Program[]; universities: University[]; onClose: () => void; onSave: (update: DocumentUpdate) => Promise<void>; onDelete: () => Promise<void>; onOpenUniversity: (id: number, programId?: number) => void }) {
-  const [draft, setDraft] = useState<DocumentUpdate>({ status: document.status, category: document.category, programId: document.programId, owner: document.owner, note: document.note, version: document.version })
+  const [draft, setDraft] = useState<DocumentUpdate>({ status: document.status, category: document.category, programId: document.programId, owner: document.owner, note: document.note })
+  const [versionFile, setVersionFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const university = universities.find(item => item.id === document.universityId)
@@ -176,7 +178,9 @@ function DocumentDetailsModal({ document, programs, universities, onClose, onSav
   }
   async function createVersion() {
     if (saving) return; setSaving(true); setError('')
-    try { await onSave({ ...draft, version: document.version + 1, status: 'review' }) } catch (error) { setError(error instanceof Error ? error.message : 'Не удалось создать новую версию'); setSaving(false) }
+    if (!versionFile) { setError('Выберите файл новой версии'); setSaving(false); return }
+    if (versionFile.size > 25 * 1024 * 1024) { setError('Файл превышает ограничение 25 МБ'); setSaving(false); return }
+    try { await onSave({ ...draft, file: versionFile, status: 'review' }) } catch (error) { setError(error instanceof Error ? error.message : 'Не удалось создать новую версию'); setSaving(false) }
   }
   async function remove() {
     if (!window.confirm(`Удалить документ «${document.name}»?`)) return
@@ -192,6 +196,7 @@ function DocumentDetailsModal({ document, programs, universities, onClose, onSav
       <label>Программа<select disabled={saving} value={draft.programId ?? ''} onChange={(event: ChangeEvent<HTMLSelectElement>) => setDraft(current => ({ ...current, programId: event.target.value ? Number(event.target.value) : undefined }))}><option value="">Без привязки</option>{availablePrograms.map(program => <option key={program.id} value={program.id}>{program.name}</option>)}</select></label>
       <label>Ответственный<input disabled={saving} maxLength={120} value={draft.owner ?? ''} onChange={(event: ChangeEvent<HTMLInputElement>) => setDraft(current => ({ ...current, owner: event.target.value }))}/></label>
       <label>Комментарий<textarea disabled={saving} rows={3} maxLength={2000} value={draft.note ?? ''} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDraft(current => ({ ...current, note: event.target.value }))}/></label>
+      <label>Файл новой версии<input disabled={saving} type="file" onChange={(event: ChangeEvent<HTMLInputElement>) => setVersionFile(event.target.files?.[0] ?? null)} /></label>
       {error && <p className="form-error" role="alert">{error}</p>}
     </div>
     <div className="document-modal-footer"><button className="danger-button" disabled={saving} onClick={() => void remove()}>Удалить</button><div><button className="task-action" disabled={saving} onClick={() => { onClose(); onOpenUniversity(document.universityId, document.programId) }}>Открыть вуз</button><button className="task-action" disabled={saving} onClick={() => void createVersion()}>Новая версия</button><button className="primary-button" disabled={saving} onClick={() => void save()}>{saving ? 'Сохранение…' : 'Сохранить'}</button></div></div>
