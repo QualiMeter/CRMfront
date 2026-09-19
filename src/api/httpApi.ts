@@ -311,8 +311,42 @@ async function remoteUniversityDetails(id: number): Promise<UniversityDetails> {
 }
 
 async function remoteUniversities(): Promise<University[]> {
-  const rows = await request<Row[]>('/api/v1/universities?limit=500')
-  return Promise.all(rows.map(row => remoteUniversityDetails(number(row.id)).then(details => details.university)))
+  // Build list summaries in a fixed number of requests. Previously every row
+  // opened a full university card (including files and comments), and callers
+  // then opened all cards again to load programs. Besides being slow, that made
+  // every screen fail when any one nested request timed out.
+  const [rows, programs, interactions, contacts, stages] = await Promise.all([
+    request<Row[]>('/api/v1/universities?limit=500'),
+    optionalTable('programs'),
+    optionalTable('interactions'),
+    optionalTable('university_contacts'),
+    optionalTable('workflow_stage_instances'),
+  ])
+  return rows.map(row => {
+    const id = number(row.id)
+    const universityPrograms = programs.filter(program => number(program.university_id) === id)
+    const universityInteractions = interactions.filter(interaction => number(interaction.university_id) === id)
+    const interactionIds = new Set(universityInteractions.map(interaction => number(interaction.id)))
+    const universityStages = stages.filter(stage => interactionIds.has(number(stage.interaction_id)))
+    const universityContacts = contacts.filter(contact => number(contact.university_id) === id)
+    const primaryContact = universityContacts.find(contact => Boolean(contact.is_primary)) ?? universityContacts[0]
+    return {
+      id,
+      name: text(row.name, 'Учебное заведение'),
+      shortName: text(row.short_name, 'Вуз'),
+      city: text(row.city),
+      contactPerson: text(primaryContact?.full_name, 'Не указан'),
+      contactRole: text(primaryContact?.position, 'Контактное лицо'),
+      status: universityStatus[text(row.status)] ?? text(row.status, 'Без статуса'),
+      programsCount: universityPrograms.length,
+      activePrograms: universityInteractions.filter(interaction => interaction.status === 'active').length,
+      students: universityPrograms.reduce((sum, program) => sum + number(program.students_count), 0),
+      streams: universityPrograms.reduce((sum, program) => sum + number(program.streams_count), 0),
+      progress: universityStages.length
+        ? Math.round(universityStages.filter(stage => stage.status === 'done').length * 100 / universityStages.length)
+        : 0,
+    }
+  })
 }
 
 async function findUserId(name: string): Promise<number | null> {
