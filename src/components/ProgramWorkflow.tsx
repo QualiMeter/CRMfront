@@ -104,7 +104,7 @@ function StageEditor({ stage, statusLabels, onSave, onUpload, onDeleteAttachment
       </div>
       <p className="save-message" role="status">{message}</p>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <p className="demo-note">Демо: изменения доступны до перезагрузки страницы.</p>
+      <p className="demo-note">Изменения этапов сохраняются на backend.</p>
     </form>
   </section>
 }
