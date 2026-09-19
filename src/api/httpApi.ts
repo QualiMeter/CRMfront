@@ -104,7 +104,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return await response.json() as T
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error('Backend не ответил вовремя. Railway мог выходить из спящего режима.')
+      throw new Error(`Backend не ответил вовремя (${path}). Railway мог выходить из спящего режима.`)
+    }
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      throw new Error(`Не удалось получить ответ backend (${path}).`)
     }
     throw error
   } finally {
