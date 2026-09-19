@@ -1,4 +1,4 @@
-import { mockApi } from '../mock/mockApi'
+import { httpApi } from './httpApi'
 
-// В будущем здесь достаточно заменить mockApi на httpApi.
-export const api = mockApi
+// Реальный Railway API с точечным fallback на mock при недоступности чтения.
+export const api = httpApi
