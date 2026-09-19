@@ -43,7 +43,7 @@ export interface ApiClient {
   createProgram(input: ProgramInput): Promise<UniversityDetails>
   updateProgramStage(universityId: number, programId: number, stageId: number, update: WorkflowStageUpdate): Promise<UniversityDetails>
   uploadStageAttachment(universityId: number, programId: number, stageId: number, file: File): Promise<UniversityDetails>
-  deleteStageAttachment(universityId: number, programId: number, stageId: number, attachmentId: number): Promise<UniversityDetails>
+  deleteStageAttachment(universityId: number, programId: number, stageId: number, attachmentId: string): Promise<UniversityDetails>
   getWorkflowTemplates(): Promise<WorkflowTemplate[]>
   createWorkflowTemplate(input: WorkflowTemplateInput): Promise<WorkflowTemplate>
   updateWorkflowTemplate(id: number, input: WorkflowTemplateInput): Promise<WorkflowTemplate>
