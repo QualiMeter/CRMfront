@@ -48,7 +48,7 @@ export function TasksPanel(props: TasksPanelProps & { createSignal?: number }) {
       <div className="crm-task-meta"><span>Ответственный: {task.owner}</span><span className={isOverdue(task) ? 'overdue' : ''}>{isOverdue(task) ? 'Просрочено · ' : 'Срок: '}{displayDate(task.dueDate)}</span><span className={`priority-${task.priority}`}>Приоритет: {priorities[task.priority]}</span><span>{task.status === 'done' ? 'Выполнено' : 'В работе'}</span></div></div>
       <div className="crm-task-actions"><button disabled={busy !== null} className="task-action" onClick={() => setEditor(task)}>Изменить</button><button disabled={busy !== null} className="task-action task-complete" onClick={() => void toggle(task)}>{busy === task.id ? 'Сохранение…' : task.status === 'done' ? 'Вернуть в работу' : 'Завершить'}</button></div>
     </article>)}{!filtered.length && <p className="empty-state">{scoped.length ? 'Задач по выбранным условиям нет.' : 'Задач пока нет. Добавьте первое поручение.'}</p>}</div>
-    <p className="demo-note crm-task-feedback">Демо: задачи и изменения хранятся до перезагрузки страницы.</p>
+    <p className="demo-note crm-task-feedback">Задачи и изменения сохраняются на backend.</p>
     {editor && <TaskEditor key={editor === 'new' ? 'new' : editor.id} task={editor === 'new' ? undefined : editor} universities={universities} programs={programs} universityId={universityId} initialProgramId={props.initialProgramId} onClose={() => setEditor(null)} onSave={async input => {
       if (editor === 'new') await onCreate(input)
       else { const { universityId: ignored, ...update } = input; await onUpdate(editor.id, update) }
