@@ -10,7 +10,7 @@ const sectionMeta: Record<Section, { eyebrow: string; title: string; description
   analytics: { eyebrow: 'АНАЛИТИКА И РЕЙТИНГ', title: 'Аналитика', description: 'Сводные показатели подготовки ИТ-кадров и востребованности программ' },
 }
 
-export function SectionPage({ section, programs, universities, onOpenUniversity, onCreateProgram }: { section: Section; programs: Program[]; universities: University[]; onOpenUniversity: (id: number, programId?: number) => void; onCreateProgram: (input: ProgramInput) => Promise<void> }) {
+export function SectionPage({ section, programs, universities, onOpenUniversity, onCreateProgram, canCreate = false }: { section: Section; programs: Program[]; universities: University[]; onOpenUniversity: (id: number, programId?: number) => void; onCreateProgram: (input: ProgramInput) => Promise<void>; canCreate?: boolean }) {
   const meta = sectionMeta[section]
   const [query, setQuery] = useState('')
   const [programEditor, setProgramEditor] = useState(false)
@@ -29,9 +29,9 @@ export function SectionPage({ section, programs, universities, onOpenUniversity,
   }
 
   return <div className="content">
-    <div className="page-heading"><div><div className="eyebrow">{meta.eyebrow}</div><h1>{meta.title}</h1><p className="muted">{meta.description}</p></div>{section === 'programs' && <button className="primary-button" onClick={() => setProgramEditor(true)}><Icon name="plus" size={18} /> Добавить программу</button>}</div>
+    <div className="page-heading"><div><div className="eyebrow">{meta.eyebrow}</div><h1>{meta.title}</h1><p className="muted">{meta.description}</p></div>{section === 'programs' && canCreate && <button className="primary-button" onClick={() => setProgramEditor(true)}><Icon name="plus" size={18} /> Добавить программу</button>}</div>
 
-    {section === 'programs' && <section className="card universities-list"><div className="list-header section-toolbar"><div><h2>Все программы</h2><p>{filteredPrograms.length} программ в демо</p></div><div className="list-search compact-search"><Icon name="search" size={17}/><input aria-label="Поиск программы или продукта" value={query} onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} placeholder="Поиск программы или продукта"/></div></div><ProgramList programs={filteredPrograms} onSelect={(program: Program) => onOpenUniversity(program.universityId, program.id)} /></section>}
+    {section === 'programs' && <section className="card universities-list"><div className="list-header section-toolbar"><div><h2>Все программы</h2><p>{filteredPrograms.length} программ</p></div><div className="list-search compact-search"><Icon name="search" size={17}/><input aria-label="Поиск программы или продукта" value={query} onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} placeholder="Поиск программы или продукта"/></div></div><ProgramList programs={filteredPrograms} onSelect={(program: Program) => onOpenUniversity(program.universityId, program.id)} /></section>}
 
     {section === 'analytics' && <div className="analytics-grid"><Metric title="Заявки на обучение" value={totals.applications.toLocaleString('ru-RU')} delta={`${programs.length} программ`} detail="в текущей выборке"/><Metric title="Обучающиеся" value={totals.students.toLocaleString('ru-RU')} delta={`${universities.length} вузов`} detail="по активным карточкам"/><Metric title="Активные потоки" value={totals.streams.toLocaleString('ru-RU')} delta={`${Math.round(programs.reduce((sum,p)=>sum+p.demand,0)/Math.max(1,programs.length))}%`} detail="средний индекс спроса"/><section className="card chart-card"><div className="card-header"><div><h2>Востребованность направлений</h2><p>Индекс на основе заявок, обучающихся и потоков</p></div></div>{[...programs].sort((a,b)=>b.demand-a.demand).slice(0,5).map(p => <button className="rank-row rank-row-button" key={p.id} onClick={() => onOpenUniversity(p.universityId, p.id)}><div><strong>{p.name}</strong><span>{p.product}</span></div><div className="rank-value"><div className="demand-bar"><span style={{width:`${p.demand}%`}}/></div><b>{p.demand}</b></div></button>)}</section></div>}
 
