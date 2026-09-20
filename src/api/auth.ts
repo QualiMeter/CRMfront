@@ -1,6 +1,15 @@
 const API_URL = (import.meta.env.VITE_API_URL || 'https://crmbackend-hw.up.railway.app').replace(/\/$/, '')
 const SESSION_KEY = 'rtk-crm-auth'
 
+function apiBase() {
+  // Keep production requests on the same origin. Some mobile networks and
+  // VPNs cannot reach Railway directly, while Vercel can proxy it reliably.
+  if (window.location.hostname.endsWith('.vercel.app')) {
+    return `${window.location.origin}/backend`
+  }
+  return API_URL
+}
+
 export interface AuthUser {
   id: number
   username: string
@@ -37,7 +46,7 @@ const saveSession = (session: AuthSession | null) => {
 export async function syncCurrentUser() {
   const current = getSession()
   if (!current) return null
-  const response = await authorizedFetch(`${API_URL}/api/v1/auth/me`)
+  const response = await authorizedFetch(`${apiBase()}/api/v1/auth/me`)
   const data = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(data.detail || data.message || `Ошибка ${response.status}`)
   const next = { ...current, user: data as AuthUser }
@@ -46,7 +55,7 @@ export async function syncCurrentUser() {
 }
 
 async function authRequest<T>(path: string, body: object): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${apiBase()}${path}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   })
   const data = await response.json().catch(() => ({}))
