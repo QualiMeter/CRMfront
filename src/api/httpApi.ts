@@ -27,10 +27,9 @@ const API_URL = (import.meta.env.VITE_API_URL || 'https://crmbackend-hw.up.railw
 const REQUEST_TIMEOUT = 35_000
 
 function requestBase(path: string) {
-  // Railway occasionally terminates the direct browser response from the
-  // users endpoint. On Vercel, proxy only that endpoint through
-  // the app origin; authorization headers and the backend contract stay intact.
-  if (path.startsWith('/api/v1/users') && window.location.hostname.endsWith('.vercel.app')) {
+  // Keep production requests on the same origin. Some mobile networks and
+  // VPNs cannot reach Railway directly, while Vercel can proxy it reliably.
+  if (window.location.hostname.endsWith('.vercel.app')) {
     return `${window.location.origin}/backend`
   }
   return API_URL
@@ -135,7 +134,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 async function uploadFile<T>(path: string, file: File): Promise<T> {
   const form = new FormData()
   form.append('file', file)
-  const response = await authorizedFetch(`${API_URL}${path}`, { method: 'POST', body: form })
+  const response = await authorizedFetch(`${requestBase(path)}${path}`, { method: 'POST', body: form })
   const data = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(data.detail || data.message || `Backend вернул ${response.status}`)
   return data as T
@@ -216,7 +215,8 @@ async function loadStageAttachments(stageIds: number[], users: Row[]) {
     const file = await request<Row>(`/api/v1/files/${fileId}`)
     let url = '#'
     try {
-      const response = await authorizedFetch(`${API_URL}/api/v1/files/${fileId}/download`)
+      const path = `/api/v1/files/${fileId}/download`
+      const response = await authorizedFetch(`${requestBase(path)}${path}`)
       if (response.ok) url = URL.createObjectURL(await response.blob())
     } catch { /* Metadata remains visible even if the binary is temporarily unavailable. */ }
     const uploader = users.find(user => number(user.id) === number(file.uploaded_by))
