@@ -48,6 +48,7 @@ import type {
   CrmUserInput,
   CrmUserUpdate,
   InvitationLink,
+  ItDirection,
   StudentProfile,
   StudentProfileInput,
   TeacherProfile,
@@ -76,6 +77,7 @@ function App() {
   const [settingsSignal, setSettingsSignal] = useState(0)
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([])
   const [users, setUsers] = useState<CrmUser[]>([])
+  const [directions, setDirections] = useState<ItDirection[]>([])
   const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null)
   const [teacherProfile, setTeacherProfile] = useState<TeacherProfile | null>(null)
   const [students, setStudents] = useState<StudentProfile[]>([])
@@ -157,8 +159,9 @@ function App() {
         const needsDocuments = ['/documents', '/analytics'].includes(path)
         const needsTemplates = path === '/workflows' && canManageContent
         const needsUsers = path === '/users' && canManageUsers
-        const [list, taskList, documentList, templates, userList] = await Promise.all([
+        const [list, directionList, taskList, documentList, templates, userList] = await Promise.all([
           api.getUniversities(),
+          api.getItDirections().catch(() => []),
           needsTasks ? api.getTasks() : Promise.resolve([]),
           needsDocuments ? api.getDocuments() : Promise.resolve([]),
           needsTemplates ? api.getWorkflowTemplates() : Promise.resolve([]),
@@ -166,6 +169,7 @@ function App() {
         ])
         if (cancelled) return
         setUniversities(list)
+        setDirections(directionList)
         setTasks(taskList)
         setDocuments(documentList)
         setWorkflowTemplates(templates)
@@ -394,12 +398,12 @@ function App() {
   else if (path === '/reports') content = <ReportsPage universities={universities} programs={allPrograms} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/integrations') content = canUseCrm ? <IntegrationsPage /> : <div className="content"><div className="loading card"><p role="alert">Интеграции доступны КАМам, руководителям и администраторам.</p></div></div>
   else if (path === '/approvals') content = canUseCrm ? <ApprovalsPage requests={activeRole === 'manager' ? approvalRequests.filter(item => item.requestedById === session.user.id) : approvalRequests} canReview={activeRole === 'admin'} currentUserName={session.user.full_name || session.user.username} onApprove={approveWorkflowRequest} onReject={rejectWorkflowRequest} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /> : <div className="content"><div className="loading card"><p role="alert">Согласования доступны пользователям CRM.</p></div></div>
-  else if (path === '/import') content = canUseCrm ? <ImportPage universities={universities} onImportUniversities={importUniversities} onImportPrograms={importPrograms} /> : <div className="content"><div className="loading card"><p role="alert">Импорт доступен КАМам, руководителям и администраторам.</p></div></div>
+  else if (path === '/import') content = canUseCrm ? <ImportPage universities={universities} directions={directions} onImportUniversities={importUniversities} onImportPrograms={importPrograms} /> : <div className="content"><div className="loading card"><p role="alert">Импорт доступен КАМам, руководителям и администраторам.</p></div></div>
   else if (path === '/workflows') content = canManageContent ? <WorkflowsPage templates={workflowTemplates} universities={universities} programs={allPrograms} onCreate={createWorkflowTemplate} onUpdate={updateWorkflowTemplate} onDelete={deleteWorkflowTemplate} onApply={applyWorkflowTemplate} /> : <div className="content"><div className="loading card"><p role="alert">Управление шаблонами процессов доступно руководителям и администраторам.</p></div></div>
   else if (path === '/users') content = canManageUsers
     ? <UsersPage users={users} universities={universities} leaderMode={leaderMode} onCreate={createUser} onUpdate={updateUser} onInvite={inviteUser} onRevokeInvite={revokeUserInvite} />
     : <div className="content"><div className="loading card"><p role="alert">Управление пользователями доступно руководителям и администраторам.</p></div></div>
-  else if (path === '/programs') content = <SectionPage section="programs" canCreate={canUseCrm} programs={allPrograms} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
+  else if (path === '/programs') content = <SectionPage section="programs" canCreate={canUseCrm} programs={allPrograms} universities={universities} directions={directions} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else content = <div className="content"><div className="loading card">Раздел не найден.</div></div>
 
   const visibleApprovalCount = activeRole === 'manager'
