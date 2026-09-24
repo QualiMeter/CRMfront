@@ -196,7 +196,8 @@ function App() {
   }, [path, retry, session])
 
   if (!session) return <AuthPage onAuthenticated={nextSession => { setLocation(currentLocation()); setSession(nextSession) }} />
-  const activeRole = primaryRole(session.user.roles)
+  const currentUser = session.user
+  const activeRole = primaryRole(currentUser.roles)
   const canUseCrm = activeRole === 'admin' || activeRole === 'leader' || activeRole === 'manager'
   const canManageContent = activeRole === 'admin' || activeRole === 'leader'
   const canManageUsers = activeRole === 'admin' || activeRole === 'leader'
@@ -232,14 +233,14 @@ function App() {
         fromStatus: stage.status,
         toStatus: update.status,
         update,
-        requestedById: session.user.id,
-        requestedByName: session.user.full_name || session.user.username,
+        requestedById: currentUser.id,
+        requestedByName: currentUser.full_name || currentUser.username,
         requestedAt: new Date().toISOString(),
         status: 'pending',
       }
       changeApprovalRequests(current => [
         request,
-        ...current.filter(item => !(item.status === 'pending' && item.stageId === stageId && item.requestedById === session.user.id)),
+        ...current.filter(item => !(item.status === 'pending' && item.stageId === stageId && item.requestedById === currentUser.id)),
       ])
       return 'Данные этапа сохранены. Смена статуса отправлена администратору на согласование.'
     }
@@ -258,7 +259,7 @@ function App() {
     changeApprovalRequests(current => current.map(item => item.id === id ? {
       ...item,
       status: 'approved',
-      reviewedByName: session.user.full_name || session.user.username,
+      reviewedByName: currentUser.full_name || currentUser.username,
       reviewedAt: new Date().toISOString(),
       reviewComment,
     } : item))
@@ -272,7 +273,7 @@ function App() {
     changeApprovalRequests(current => current.map(item => item.id === id ? {
       ...item,
       status: 'rejected',
-      reviewedByName: session.user.full_name || session.user.username,
+      reviewedByName: currentUser.full_name || currentUser.username,
       reviewedAt: new Date().toISOString(),
       reviewComment,
     } : item))
@@ -371,7 +372,7 @@ function App() {
   let content: ReactNode
   if (loading) content = <div className="content"><div className="loading card" role="status">Загрузка данных…</div></div>
   else if (error) content = <div className="content"><div className="loading card"><p role="alert">{error}</p><button className="outline-button" onClick={() => setRetry(value => value + 1)}>Повторить загрузку</button></div></div>
-  else if (activeRole === 'user') content = path === '/profile' ? <ProfilePage currentUser={session.user} onOpenSettings={() => setSettingsSignal(value => value + 1)} /> : <PendingRolePage user={session.user} onCheckRole={async () => primaryRole((await refreshCurrentSession())?.user.roles ?? []) !== 'user'} />
+  else if (activeRole === 'user') content = path === '/profile' ? <ProfilePage currentUser={currentUser} onOpenSettings={() => setSettingsSignal(value => value + 1)} /> : <PendingRolePage user={session.user} onCheckRole={async () => primaryRole((await refreshCurrentSession())?.user.roles ?? []) !== 'user'} />
   else if (activeRole === 'student' && studentProfile) {
     const ownUniversity = universities.find(item => item.id === studentProfile.universityId)
     const ownProgram = allPrograms.find(item => item.id === studentProfile.programId)
@@ -390,16 +391,16 @@ function App() {
     else content = <TeacherOverviewPage profile={teacherProfile} university={ownUniversity} programs={ownPrograms} students={ownStudents} navigate={navigate} />
   }
   else if (path === '/') content = <OverviewPage universities={universities} programs={allPrograms} activities={allActivities} tasks={tasks} onOpenUniversity={id => navigate(`/universities/${id}`)} onOpenUniversities={() => navigate('/universities')} onOpenPrograms={() => navigate('/programs')} onOpenTasks={() => navigate('/tasks')} onOpenAnalytics={() => navigate('/analytics')} />
-  else if (path === '/profile') content = <ProfilePage currentUser={session.user} onOpenSettings={() => setSettingsSignal(value => value + 1)} />
+  else if (path === '/profile') content = <ProfilePage currentUser={currentUser} onOpenSettings={() => setSettingsSignal(value => value + 1)} />
   else if (path === '/universities') content = <UniversitiesPage universities={universities} canCreate={canUseCrm} initialQuery={url.searchParams.get('search') ?? ''} onCreate={createUniversity} onOpen={id => navigate(`/universities/${id}`)} />
-  else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onUploadStageAttachment={uploadStageAttachment} onDeleteStageAttachment={deleteStageAttachment} onCreateTask={createTask} onUpdateTask={updateTask} onOpenPrograms={() => navigate('/programs')} requiresStatusApproval={activeRole !== 'admin'} currentUserName={session.user.full_name || session.user.username} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
+  else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onUploadStageAttachment={uploadStageAttachment} onDeleteStageAttachment={deleteStageAttachment} onCreateTask={createTask} onUpdateTask={updateTask} onOpenPrograms={() => navigate('/programs')} requiresStatusApproval={activeRole !== 'admin'} currentUserName={currentUser.full_name || currentUser.username} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
   else if (path === '/tasks') content = <div className="content"><div className="page-heading"><div><div className="eyebrow">РАБОЧИЙ ЦЕНТР</div><h1>Задачи</h1><p className="muted">Поручения по всем учебным заведениям и программам</p></div></div><TasksPanel tasks={tasks} universities={universities} programs={allPrograms} onCreate={createTask} onUpdate={updateTask} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /></div>
   else if (path === '/documents') content = <DocumentsPage documents={documents} programs={allPrograms} universities={universities} onCreate={createDocument} onUpdate={updateDocument} onDelete={deleteDocument} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/analytics') content = <AnalyticsPage universities={universities} programs={allPrograms} tasks={tasks} documents={documents} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} onOpenTasks={() => navigate('/tasks')} onOpenDocuments={() => navigate('/documents')} />
   else if (path === '/reports') content = <ReportsPage universities={universities} programs={allPrograms} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/student-registry') content = canUseCrm ? <StudentRegistryPage universities={universities} programs={allPrograms} /> : <div className="content"><div className="loading card"><p role="alert">Реестр студентов доступен пользователям CRM.</p></div></div>
   else if (path === '/integrations') content = canUseCrm ? <IntegrationsPage /> : <div className="content"><div className="loading card"><p role="alert">Интеграции доступны КАМам, руководителям и администраторам.</p></div></div>
-  else if (path === '/approvals') content = canUseCrm ? <ApprovalsPage requests={activeRole === 'manager' ? approvalRequests.filter(item => item.requestedById === session.user.id) : approvalRequests} canReview={activeRole === 'admin'} currentUserName={session.user.full_name || session.user.username} onApprove={approveWorkflowRequest} onReject={rejectWorkflowRequest} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /> : <div className="content"><div className="loading card"><p role="alert">Согласования доступны пользователям CRM.</p></div></div>
+  else if (path === '/approvals') content = canUseCrm ? <ApprovalsPage requests={activeRole === 'manager' ? approvalRequests.filter(item => item.requestedById === currentUser.id) : approvalRequests} canReview={activeRole === 'admin'} currentUserName={currentUser.full_name || currentUser.username} onApprove={approveWorkflowRequest} onReject={rejectWorkflowRequest} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /> : <div className="content"><div className="loading card"><p role="alert">Согласования доступны пользователям CRM.</p></div></div>
   else if (path === '/import') content = canUseCrm ? <ImportPage universities={universities} directions={directions} onImportUniversities={importUniversities} onImportPrograms={importPrograms} /> : <div className="content"><div className="loading card"><p role="alert">Импорт доступен КАМам, руководителям и администраторам.</p></div></div>
   else if (path === '/workflows') content = canManageContent ? <WorkflowsPage templates={workflowTemplates} universities={universities} programs={allPrograms} onCreate={createWorkflowTemplate} onUpdate={updateWorkflowTemplate} onDelete={deleteWorkflowTemplate} onApply={applyWorkflowTemplate} /> : <div className="content"><div className="loading card"><p role="alert">Управление шаблонами процессов доступно руководителям и администраторам.</p></div></div>
   else if (path === '/users') content = canManageUsers
@@ -409,10 +410,10 @@ function App() {
   else content = <div className="content"><div className="loading card">Раздел не найден.</div></div>
 
   const visibleApprovalCount = activeRole === 'manager'
-    ? approvalRequests.filter(item => item.status === 'pending' && item.requestedById === session.user.id).length
+    ? approvalRequests.filter(item => item.status === 'pending' && item.requestedById === currentUser.id).length
     : approvalRequests.filter(item => item.status === 'pending').length
 
-  return <AppShell currentUser={session.user} onLogout={async () => { await logout(); setSession(null) }} settingsSignal={settingsSignal} taskCount={tasks.filter(task => task.status === 'open').length} approvalCount={visibleApprovalCount} path={path} navigate={navigate}>{content}</AppShell>
+  return <AppShell currentUser={currentUser} onLogout={async () => { await logout(); setSession(null) }} settingsSignal={settingsSignal} taskCount={tasks.filter(task => task.status === 'open').length} approvalCount={visibleApprovalCount} path={path} navigate={navigate}>{content}</AppShell>
 }
 
 export default App
