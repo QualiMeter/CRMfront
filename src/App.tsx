@@ -15,6 +15,7 @@ import { ProfilePage } from './pages/ProfilePage'
 import { ReportsPage } from './pages/ReportsPage'
 import { ImportPage } from './pages/ImportPage'
 import { IntegrationsPage } from './pages/IntegrationsPage'
+import { StudentRegistryPage } from './pages/StudentRegistryPage'
 import { ApprovalsPage } from './pages/ApprovalsPage'
 import { WorkflowsPage } from './pages/WorkflowsPage'
 import { UsersPage } from './pages/UsersPage'
@@ -177,7 +178,7 @@ function App() {
         if (path.startsWith('/universities/')) {
           const data = await api.getUniversity(Number(path.split('/')[2]))
           if (!cancelled) setDetails(data)
-        } else if (path === '/' || ['/programs', '/analytics', '/reports', '/workflows', '/tasks', '/documents'].includes(path)) {
+        } else if (path === '/' || ['/programs', '/analytics', '/reports', '/workflows', '/tasks', '/documents', '/student-registry'].includes(path)) {
           const detailsList = await Promise.all(list.map(university => api.getUniversity(university.id)))
           if (!cancelled) {
             setAllPrograms(detailsList.flatMap(data => data.programs))
@@ -396,6 +397,7 @@ function App() {
   else if (path === '/documents') content = <DocumentsPage documents={documents} programs={allPrograms} universities={universities} onCreate={createDocument} onUpdate={updateDocument} onDelete={deleteDocument} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/analytics') content = <AnalyticsPage universities={universities} programs={allPrograms} tasks={tasks} documents={documents} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} onOpenTasks={() => navigate('/tasks')} onOpenDocuments={() => navigate('/documents')} />
   else if (path === '/reports') content = <ReportsPage universities={universities} programs={allPrograms} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
+  else if (path === '/student-registry') content = canUseCrm ? <StudentRegistryPage universities={universities} programs={allPrograms} /> : <div className="content"><div className="loading card"><p role="alert">Реестр студентов доступен пользователям CRM.</p></div></div>
   else if (path === '/integrations') content = canUseCrm ? <IntegrationsPage /> : <div className="content"><div className="loading card"><p role="alert">Интеграции доступны КАМам, руководителям и администраторам.</p></div></div>
   else if (path === '/approvals') content = canUseCrm ? <ApprovalsPage requests={activeRole === 'manager' ? approvalRequests.filter(item => item.requestedById === session.user.id) : approvalRequests} canReview={activeRole === 'admin'} currentUserName={session.user.full_name || session.user.username} onApprove={approveWorkflowRequest} onReject={rejectWorkflowRequest} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /> : <div className="content"><div className="loading card"><p role="alert">Согласования доступны пользователям CRM.</p></div></div>
   else if (path === '/import') content = canUseCrm ? <ImportPage universities={universities} directions={directions} onImportUniversities={importUniversities} onImportPrograms={importPrograms} /> : <div className="content"><div className="loading card"><p role="alert">Импорт доступен КАМам, руководителям и администраторам.</p></div></div>
