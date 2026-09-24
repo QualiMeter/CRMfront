@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { Icon } from '../components/Icon'
-import type { ProgramInput, University, UniversityInput } from '../types/domain'
+import type { ItDirection, ProgramInput, University, UniversityInput } from '../types/domain'
 import type { WorkBook } from '@e965/xlsx'
 import '../import.css'
 import '../import-fix.css'
@@ -20,7 +20,8 @@ const universityFields = [
 
 const programFields = [
   ['university', 'Вуз', true, ['названиевуза', 'вуз', 'университет', 'university']],
-  ['name', 'ИТ-направление / программа', true, ['итнаправление', 'направление', 'программа', 'program']],
+  ['direction', 'ИТ-направление', true, ['итнаправление', 'направление', 'direction']],
+  ['name', 'Название программы', true, ['названиепрограммы', 'программа', 'program']],
   ['product', 'ИТ-продукт / ПО', true, ['итпродукт', 'по', 'программноеобеспечение', 'software', 'product']],
   ['students', 'Обучающиеся', false, ['обучающиеся', 'студенты', 'students']],
   ['streams', 'Потоки', false, ['потоки', 'streams']],
@@ -33,8 +34,9 @@ const stringValue = (value: unknown) => String(value ?? '').trim()
 const numberValue = (value: unknown) => { const parsed = Number(String(value ?? '0').replace(',', '.').replace(/\s/g, '')); return Number.isFinite(parsed) ? parsed : NaN }
 const optionalNumber = (value: unknown) => stringValue(value) ? numberValue(value) : 0
 
-export function ImportPage({ universities, onImportUniversities, onImportPrograms }: {
+export function ImportPage({ universities, directions, onImportUniversities, onImportPrograms }: {
   universities: University[]
+  directions: ItDirection[]
   onImportUniversities: (rows: UniversityInput[]) => Promise<number>
   onImportPrograms: (rows: ProgramInput[]) => Promise<number>
 }) {
@@ -100,13 +102,16 @@ export function ImportPage({ universities, onImportUniversities, onImportProgram
     }
     const universityText = stringValue(value('university'))
     const university = universities.find(item => normalize(item.name) === normalize(universityText) || normalize(item.shortName) === normalize(universityText))
-    const item: ProgramInput = { universityId: university?.id ?? 0, name: stringValue(value('name')), product: stringValue(value('product')), students: optionalNumber(value('students')), streams: optionalNumber(value('streams')), applications: optionalNumber(value('applications')), demand: optionalNumber(value('demand')) }
+    const directionText = stringValue(value('direction'))
+    const direction = directions.find(item => normalize(item.name) === normalize(directionText) || normalize(item.code) === normalize(directionText))
+    const item: ProgramInput = { universityId: university?.id ?? 0, directionId: direction?.id, name: stringValue(value('name')), product: stringValue(value('product')), students: optionalNumber(value('students')), streams: optionalNumber(value('streams')), applications: optionalNumber(value('applications')), demand: optionalNumber(value('demand')) }
     if (!universityText) errors.push('Не указан вуз'); else if (!university) errors.push(`Вуз «${universityText}» не найден`)
-    if (!item.name) errors.push('Не указано направление'); if (!item.product) errors.push('Не указан ИТ-продукт')
+    if (!directionText) errors.push('Не указано ИТ-направление'); else if (!direction) errors.push(`ИТ-направление «${directionText}» не найдено в справочнике`)
+    if (!item.name) errors.push('Не указано название программы'); if (!item.product) errors.push('Не указан ИТ-продукт')
     for (const [label, number] of [['обучающиеся', item.students], ['потоки', item.streams], ['заявки', item.applications], ['спрос', item.demand]] as const) if (!Number.isFinite(number) || number < 0) errors.push(`Некорректное значение: ${label}`)
     if (item.demand > 100) errors.push('Спрос должен быть от 0 до 100')
     return { index, item, errors }
-  }), [rawRows, mapping, kind, universities])
+  }), [rawRows, mapping, kind, universities, directions])
   const validRows = parsed.filter(row => !row.errors.length)
   const invalidRows = parsed.filter(row => row.errors.length)
   const mappingComplete = fields.filter(field => field[2]).every(([key]) => mapping[key])
@@ -126,9 +131,9 @@ export function ImportPage({ universities, onImportUniversities, onImportProgram
 
   return <div className="content import-workspace">
     <div className="page-heading"><div><div className="eyebrow">МАССОВОЕ ОБНОВЛЕНИЕ</div><h1>Импорт из Excel</h1><p className="muted">Загрузите справочники из XLS/XLSX, сопоставьте поля и проверьте строки</p></div></div>
-    <section className="card import-source-card"><div className="import-kind-tabs"><button className={kind === 'universities' ? 'active' : ''} onClick={() => resetData('universities')}>Учебные заведения</button><button className={kind === 'programs' ? 'active' : ''} onClick={() => resetData('programs')}>Программы и ИТ-продукты</button></div><div className="import-dropzone"><span className="import-file-icon"><Icon name="file" size={24} /></span><div><strong>{fileName || 'Выберите таблицу Excel'}</strong><p>XLS или XLSX · первая строка должна содержать заголовки · до 20 МБ</p></div><button className="primary-button" disabled={busy} onClick={() => inputRef.current?.click()}>{fileName ? 'Заменить файл' : 'Выбрать файл'}</button><input ref={inputRef} className="visually-hidden" type="file" accept=".xls,.xlsx" onChange={chooseFile} /></div>{sheetNames.length > 1 && <label className="import-sheet-select">Лист<select value={sheetName} onChange={event => workbook && loadSheet(workbook, event.target.value)}>{sheetNames.map(name => <option key={name}>{name}</option>)}</select></label>}</section>
-    {!!headers.length && <><section className="card import-mapping-card"><div className="card-header"><div><h2>Сопоставление столбцов</h2><p>{mappingComplete ? 'Колонки распознаны автоматически. Проверьте соответствие перед импортом.' : 'Не все обязательные колонки распознаны — выберите их вручную.'}</p></div><span className={`import-state ${mappingComplete ? 'ok' : ''}`}>{mappingComplete ? 'Распознано' : 'Нужно заполнить'}</span></div>{kind === 'programs' && <div className="import-order-note"><strong>Сначала импортируйте вузы</strong><span>Программы привязываются к существующим вузам по названию или аббревиатуре.</span></div>}<div className="import-mapping-grid">{fields.map(([key, label, required]) => <label key={key}><span>{label}{required && <b> *</b>}</span><select value={mapping[key] ?? ''} onChange={event => setMapping(current => ({ ...current, [key]: event.target.value }))}><option value="">Не импортировать</option>{headers.map(header => <option key={header}>{header}</option>)}</select></label>)}</div></section>
-    <section className="card import-preview-card"><div className="card-header"><div><h2>Проверка данных</h2><p>Корректных: {validRows.length} · с ошибками: {invalidRows.length} · всего: {rawRows.length}</p></div><button className="primary-button" disabled={busy || !mappingComplete || !validRows.length} onClick={() => void applyImport()}>{busy ? 'Обработка…' : `Импортировать ${validRows.length}`}</button></div><div className="import-preview-list">{parsed.slice(0, 50).map(row => <article key={row.index} className={row.errors.length ? 'invalid' : 'valid'}><span>{row.errors.length ? '!' : '✓'}</span><div><strong>Строка {row.index + 2}</strong><p>{kind === 'universities' ? `${(row.item as UniversityInput).name || 'Без названия'} · ${(row.item as UniversityInput).city || 'город не указан'}` : `${(row.item as ProgramInput).name || 'Без направления'} · ${(row.item as ProgramInput).product || 'продукт не указан'}`}</p>{row.errors.length > 0 && <small>{row.errors.join(' · ')}</small>}</div></article>)}{parsed.length > 50 && <p className="import-more">Показаны первые 50 строк из {parsed.length}.</p>}</div></section></>}
+    <section className="card import-source-card"><div className="import-kind-tabs"><button className={kind === 'universities' ? 'active' : ''} onClick={() => resetData('universities')}>Учебные заведения</button><button className={kind === 'programs' ? 'active' : ''} onClick={() => resetData('programs')}>Направления, программы и ИТ-продукты</button></div><div className="import-dropzone"><span className="import-file-icon"><Icon name="file" size={24} /></span><div><strong>{fileName || 'Выберите таблицу Excel'}</strong><p>XLS или XLSX · первая строка должна содержать заголовки · до 20 МБ</p></div><button className="primary-button" disabled={busy} onClick={() => inputRef.current?.click()}>{fileName ? 'Заменить файл' : 'Выбрать файл'}</button><input ref={inputRef} className="visually-hidden" type="file" accept=".xls,.xlsx" onChange={chooseFile} /></div>{sheetNames.length > 1 && <label className="import-sheet-select">Лист<select value={sheetName} onChange={event => workbook && loadSheet(workbook, event.target.value)}>{sheetNames.map(name => <option key={name}>{name}</option>)}</select></label>}</section>
+    {!!headers.length && <><section className="card import-mapping-card"><div className="card-header"><div><h2>Сопоставление столбцов</h2><p>{mappingComplete ? 'Колонки распознаны автоматически. Проверьте соответствие перед импортом.' : 'Не все обязательные колонки распознаны — выберите их вручную.'}</p></div><span className={`import-state ${mappingComplete ? 'ok' : ''}`}>{mappingComplete ? 'Распознано' : 'Нужно заполнить'}</span></div>{kind === 'programs' && <div className="import-order-note"><strong>Сначала заполните справочники</strong><span>Программа привязывается к существующему вузу и отдельному ИТ-направлению; ИТ-продукт остаётся самостоятельным полем.</span></div>}<div className="import-mapping-grid">{fields.map(([key, label, required]) => <label key={key}><span>{label}{required && <b> *</b>}</span><select value={mapping[key] ?? ''} onChange={event => setMapping(current => ({ ...current, [key]: event.target.value }))}><option value="">Не импортировать</option>{headers.map(header => <option key={header}>{header}</option>)}</select></label>)}</div></section>
+    <section className="card import-preview-card"><div className="card-header"><div><h2>Проверка данных</h2><p>Корректных: {validRows.length} · с ошибками: {invalidRows.length} · всего: {rawRows.length}</p></div><button className="primary-button" disabled={busy || !mappingComplete || !validRows.length} onClick={() => void applyImport()}>{busy ? 'Обработка…' : `Импортировать ${validRows.length}`}</button></div><div className="import-preview-list">{parsed.slice(0, 50).map(row => <article key={row.index} className={row.errors.length ? 'invalid' : 'valid'}><span>{row.errors.length ? '!' : '✓'}</span><div><strong>Строка {row.index + 2}</strong><p>{kind === 'universities' ? `${(row.item as UniversityInput).name || 'Без названия'} · ${(row.item as UniversityInput).city || 'город не указан'}` : `${directions.find(direction => direction.id === (row.item as ProgramInput).directionId)?.name || 'Без направления'} · ${(row.item as ProgramInput).name || 'Без программы'} · ${(row.item as ProgramInput).product || 'продукт не указан'}`}</p>{row.errors.length > 0 && <small>{row.errors.join(' · ')}</small>}</div></article>)}{parsed.length > 50 && <p className="import-more">Показаны первые 50 строк из {parsed.length}.</p>}</div></section></>}
     {message && <p className="import-feedback success" role="status">{message}</p>}{error && <p className="import-feedback error" role="alert">{error}</p>}
     <p className="demo-note">Импортированные записи сохраняются на backend.</p>
   </div>
