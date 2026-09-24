@@ -22,6 +22,7 @@ import type {
   CrmUserInput,
   CrmUserUpdate,
   InvitationLink,
+  ItDirection,
   StudentProfile,
   StudentProfileInput,
   TeacherProfile,
@@ -253,7 +254,7 @@ async function loadStageNotes(stageIds: number[]) {
 }
 
 async function buildPrograms(universityId: number, rows: Row[], interactions: Row[], users: Row[]): Promise<Program[]> {
-  const [products, links] = await Promise.all([optionalTable('it_products'), optionalTable('program_products')])
+  const [products, links, directions] = await Promise.all([optionalTable('it_products'), optionalTable('program_products'), optionalTable('it_directions')])
   return Promise.all(rows.map(async row => {
     const programId = number(row.id)
     const interaction = interactions.find(item => number(item.program_id) === programId)
@@ -272,9 +273,12 @@ async function buildPrograms(universityId: number, rows: Row[], interactions: Ro
     }))
     const currentStage = workflow.find(stage => stage.status === 'active')
       ?? workflow.find(stage => stage.status !== 'done')
+    const direction = directions.find(item => number(item.id) === number(row.direction_id))
     return {
       id: programId,
       universityId,
+      directionId: nullableNumber(row.direction_id),
+      direction: text(direction?.name, 'Направление не указано'),
       name: text(row.name, 'Программа'),
       product: text(product?.name, text(product?.software_name, interaction ? text(interaction.name) : 'ИТ-продукт не указан')),
       students: number(row.students_count),
@@ -515,6 +519,13 @@ async function remoteWorkflowTemplates(): Promise<WorkflowTemplate[]> {
 }
 
 export const httpApi: ApiClient = {
+  async getItDirections() {
+    return (await request<Row[]>('/api/v1/it-directions?limit=500')).map((row): ItDirection => ({
+      id: number(row.id),
+      name: text(row.name, 'ИТ-направление'),
+      code: text(row.code) || undefined,
+    }))
+  },
   async getUsers() {
     return mapUsers(await request<Row[]>('/api/v1/users'))
   },
@@ -704,12 +715,14 @@ export const httpApi: ApiClient = {
   async createProgram(input: ProgramInput) {
     const directions = await table('it_directions')
     if (!directions.length) throw new Error('На backend сначала нужно добавить хотя бы одно ИТ-направление')
+    const directionId = input.directionId ?? number(directions[0].id)
+    if (!directions.some(item => number(item.id) === directionId)) throw new Error('Выбранное ИТ-направление не найдено')
     let products = await table('it_products')
     let product = products.find(item => text(item.name).toLowerCase() === input.product.toLowerCase())
     if (!product) product = await createRow<Row>('it_products', { name: input.product, is_active: true })
     const program = await createRow<Row>('programs', {
       university_id: input.universityId,
-      direction_id: number(directions[0].id),
+      direction_id: directionId,
       name: input.name,
       applications_count: input.applications,
       students_count: input.students,
