@@ -46,11 +46,13 @@ export function StudentOverviewPage({ profile, university, program, documents, n
   const profileFields = [profile.studentNumber, profile.universityId, profile.programId, profile.courseYear, profile.groupName, profile.enrollmentYear]
   const completion = Math.round(profileFields.filter(Boolean).length / profileFields.length * 100)
   const relatedDocuments = documents.filter(item => !profile.programId || !item.programId || item.programId === profile.programId)
+  const onboardingSteps = [{ label: 'Вуз назначен', done: Boolean(university) }, { label: 'Программа выбрана', done: Boolean(program) }, { label: 'Курс и группа заполнены', done: Boolean(profile.courseYear && profile.groupName) }]
   return <div className="content portal-page">
     <section className="portal-hero student-hero">
       <div><div className="eyebrow">КАБИНЕТ СТУДЕНТА</div><h1>Привет, {profile.fullName.split(' ')[0] || 'студент'}!</h1><p>{program ? `Ваша программа — ${program.name}` : 'Заполните учебный профиль, чтобы увидеть свою программу.'}</p></div>
       <button className="portal-hero-action" onClick={() => navigate('/profile')}>Профиль заполнен на {completion}% <Icon name="arrow" size={16} /></button>
     </section>
+    {!onboardingSteps.every(step => step.done) && <PortalOnboarding title="Завершите настройку кабинета" steps={onboardingSteps} action="Заполнить профиль" onClick={() => navigate('/profile')} />}
     <section className="portal-kpis">
       <PortalKpi label="Курс" value={profile.courseYear ? `${profile.courseYear}` : '—'} caption="текущий год" icon="book" />
       <PortalKpi label="Группа" value={profile.groupName || '—'} caption="учебная группа" icon="users" />
@@ -70,8 +72,10 @@ export function StudentOverviewPage({ profile, university, program, documents, n
 
 export function TeacherOverviewPage({ profile, university, programs, students, navigate }: { profile: TeacherProfile; university?: University; programs: Program[]; students: StudentProfile[]; navigate: Navigate }) {
   const ownStudents = profile.universityId ? students.filter(student => student.universityId === profile.universityId) : students
+  const onboardingSteps = [{ label: 'Вуз назначен', done: Boolean(university) }, { label: 'Кафедра указана', done: Boolean(profile.department) }, { label: 'Специализация заполнена', done: Boolean(profile.specialization) }]
   return <div className="content portal-page">
     <section className="portal-hero teacher-hero"><div><div className="eyebrow">КАБИНЕТ ПРЕПОДАВАТЕЛЯ</div><h1>{profile.fullName}</h1><p>{profile.department || 'Укажите кафедру в профиле'}{university ? ` · ${university.shortName}` : ''}</p></div><button className="portal-hero-action" onClick={() => navigate('/profile')}>Редактировать профиль <Icon name="arrow" size={16} /></button></section>
+    {!onboardingSteps.every(step => step.done) && <PortalOnboarding title="Подготовьте профиль преподавателя" steps={onboardingSteps} action="Дополнить профиль" onClick={() => navigate('/profile')} />}
     <section className="portal-kpis"><PortalKpi label="Студенты" value={ownStudents.length} caption="в доступном вузе" icon="users" /><PortalKpi label="Программы" value={programs.length} caption="образовательных треков" icon="book" /><PortalKpi label="Кафедра" value={profile.department || '—'} caption="подразделение" icon="building" /><PortalKpi label="Специализация" value={profile.specialization || '—'} caption="профиль работы" icon="chart" /></section>
     <div className="portal-grid teacher-grid">
       <section className="card portal-primary-card"><div className="card-header"><div><div className="eyebrow">ПРОГРАММЫ ВУЗА</div><h2>Образовательные программы</h2></div><button className="outline-button" onClick={() => navigate('/programs')}>Показать все</button></div><div className="teacher-program-list">{programs.slice(0, 4).map(program => <article key={program.id}><div><strong>{program.name}</strong><small>{program.product}</small></div><span>{program.students} студентов</span></article>)}{!programs.length && <EmptyPortalState text="После выбора вуза здесь появятся его программы." action="Заполнить профиль" onClick={() => navigate('/profile')} />}</div></section>
@@ -130,6 +134,10 @@ export function AcademicDocumentsPage({ documents, programId }: { documents: Crm
 
 function PortalKpi({ label, value, caption, icon }: { label: string; value: string | number; caption: string; icon: 'book' | 'users' | 'file' | 'check' | 'building' | 'chart' }) {
   return <article className="card portal-kpi"><span><Icon name={icon} size={20} /></span><div><small>{label}</small><strong>{value}</strong><p>{caption}</p></div></article>
+}
+
+function PortalOnboarding({ title, steps, action, onClick }: { title: string; steps: { label: string; done: boolean }[]; action: string; onClick: () => void }) {
+  return <section className="card portal-onboarding"><div><div className="eyebrow">ПЕРСОНАЛЬНАЯ НАСТРОЙКА</div><strong>{title}</strong></div><div className="portal-onboarding-steps">{steps.map(step => <span key={step.label} className={step.done ? 'done' : ''}><i>{step.done ? '✓' : '○'}</i>{step.label}</span>)}</div><button className="outline-button" onClick={onClick}>{action}</button></section>
 }
 
 function EmptyPortalState({ text, action, onClick }: { text: string; action: string; onClick: () => void }) {

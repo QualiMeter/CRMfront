@@ -132,13 +132,14 @@ function App() {
           ])
           const detailsList = await Promise.all(list.map(university => api.getUniversity(university.id).catch(() => null)))
           if (cancelled) return
+          const assignedUniversityId = profile.universityId ?? (list.length === 1 ? list[0].id : undefined)
           setUniversities(list)
           setDocuments(documentList)
           setStudents(studentList)
           setAllPrograms(detailsList.flatMap(data => data?.programs ?? []))
           setAllActivities([])
-          if (activeRole === 'student') setStudentProfile(profile as StudentProfile)
-          else setTeacherProfile(profile as TeacherProfile)
+          if (activeRole === 'student') setStudentProfile({ ...(profile as StudentProfile), universityId: assignedUniversityId })
+          else setTeacherProfile({ ...(profile as TeacherProfile), universityId: assignedUniversityId })
           return
         }
         if (activeRole === 'user') return
