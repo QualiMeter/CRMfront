@@ -225,6 +225,7 @@ function App() {
       setUniversities(current => current.map(university => university.id === universityId ? updated.university : university))
       const request: WorkflowApprovalRequest = {
         id: createApprovalId(),
+        kind: 'status_change',
         universityId,
         universityName: details.university.name,
         programId,
@@ -252,11 +253,63 @@ function App() {
     return activeRole === 'admin' && update.status !== stage.status ? 'Статус изменён с подтверждением администратора.' : undefined
   }
 
+  async function rollbackStage(programId: number, stageId: number): Promise<string | void> {
+    if (!details) throw new Error('Откройте карточку вуза заново')
+    const universityId = details.university.id
+    const program = details.programs.find(item => item.id === programId)
+    const stage = program?.workflow.find(item => item.id === stageId)
+    if (!program || !stage) throw new Error('Текущий этап программы не найден')
+    const previous = [...program.workflow].filter(item => item.order < stage.order).sort((a, b) => b.order - a.order)[0]
+    if (!previous) throw new Error('Это первый этап — возвращаться некуда')
+
+    const currentUpdate: WorkflowStageUpdate = { status: 'pending', owner: stage.owner ?? '', date: stage.date ?? '', note: stage.note ?? '' }
+    const previousUpdate: WorkflowStageUpdate = { status: 'active', owner: previous.owner ?? '', date: previous.date ?? '', note: previous.note ?? '' }
+
+    if (activeRole !== 'admin') {
+      const request: WorkflowApprovalRequest = {
+        id: createApprovalId(),
+        kind: 'rollback',
+        universityId,
+        universityName: details.university.name,
+        programId,
+        programName: program.name,
+        stageId: stage.id,
+        stageTitle: stage.title,
+        fromStatus: stage.status,
+        toStatus: 'pending',
+        update: currentUpdate,
+        targetStageId: previous.id,
+        targetStageTitle: previous.title,
+        targetStageUpdate: previousUpdate,
+        requestedById: currentUser.id,
+        requestedByName: currentUser.full_name || currentUser.username,
+        requestedAt: new Date().toISOString(),
+        status: 'pending',
+      }
+      changeApprovalRequests(current => [
+        request,
+        ...current.filter(item => !(item.status === 'pending' && item.kind === 'rollback' && item.programId === programId && item.requestedById === currentUser.id)),
+      ])
+      return `Возврат на этап ${previous.order} отправлен администратору на согласование.`
+    }
+
+    await api.updateProgramStage(universityId, programId, stage.id, currentUpdate)
+    const updated = await api.updateProgramStage(universityId, programId, previous.id, previousUpdate)
+    setDetails(updated)
+    setUniversities(current => current.map(university => university.id === universityId ? updated.university : university))
+    return `Процесс возвращён на этап ${previous.order}: «${previous.shortTitle}».`
+  }
+
   async function approveWorkflowRequest(id: string, reviewComment?: string) {
     if (activeRole !== 'admin') throw new Error('Подтверждать смену статуса может только администратор')
     const request = approvalRequests.find(item => item.id === id && item.status === 'pending')
     if (!request) throw new Error('Запрос уже обработан или не найден')
-    await api.updateProgramStage(request.universityId, request.programId, request.stageId, request.update)
+    if (request.kind === 'rollback' && request.targetStageId && request.targetStageUpdate) {
+      await api.updateProgramStage(request.universityId, request.programId, request.stageId, request.update)
+      await api.updateProgramStage(request.universityId, request.programId, request.targetStageId, request.targetStageUpdate)
+    } else {
+      await api.updateProgramStage(request.universityId, request.programId, request.stageId, request.update)
+    }
     changeApprovalRequests(current => current.map(item => item.id === id ? {
       ...item,
       status: 'approved',
@@ -395,7 +448,7 @@ function App() {
   else if (path === '/') content = <OverviewPage universities={universities} programs={allPrograms} activities={allActivities} tasks={tasks} onOpenUniversity={id => navigate(`/universities/${id}`)} onOpenUniversities={() => navigate('/universities')} onOpenPrograms={() => navigate('/programs')} onOpenTasks={() => navigate('/tasks')} onOpenAnalytics={() => navigate('/analytics')} />
   else if (path === '/profile') content = <ProfilePage currentUser={currentUser} onOpenSettings={() => setSettingsSignal(value => value + 1)} />
   else if (path === '/universities') content = <UniversitiesPage universities={universities} canCreate={canUseCrm} initialQuery={url.searchParams.get('search') ?? ''} onCreate={createUniversity} onOpen={id => navigate(`/universities/${id}`)} />
-  else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onUploadStageAttachment={uploadStageAttachment} onDeleteStageAttachment={deleteStageAttachment} onCreateTask={createTask} onUpdateTask={updateTask} onOpenPrograms={() => navigate('/programs')} requiresStatusApproval={activeRole !== 'admin'} currentUserName={currentUser.full_name || currentUser.username} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
+  else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onRollbackStage={rollbackStage} onUploadStageAttachment={uploadStageAttachment} onDeleteStageAttachment={deleteStageAttachment} onCreateTask={createTask} onUpdateTask={updateTask} onOpenPrograms={() => navigate('/programs')} requiresStatusApproval={activeRole !== 'admin'} currentUserName={currentUser.full_name || currentUser.username} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
   else if (path === '/tasks') content = <div className="content"><div className="page-heading"><div><div className="eyebrow">РАБОЧИЙ ЦЕНТР</div><h1>Задачи</h1><p className="muted">Поручения по всем учебным заведениям и программам</p></div></div><TasksPanel tasks={tasks} universities={universities} programs={allPrograms} onCreate={createTask} onUpdate={updateTask} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /></div>
   else if (path === '/documents') content = <DocumentsPage documents={documents} programs={allPrograms} universities={universities} onCreate={createDocument} onUpdate={updateDocument} onDelete={deleteDocument} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/analytics') content = <AnalyticsPage universities={universities} programs={allPrograms} tasks={tasks} documents={documents} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} onOpenTasks={() => navigate('/tasks')} onOpenDocuments={() => navigate('/documents')} />
