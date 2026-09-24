@@ -133,6 +133,28 @@ export type DocumentUpdate = Partial<Pick<CrmDocument, 'programId' | 'category' 
 
 export type WorkflowStageUpdate = Pick<WorkflowStage, 'status' | 'owner' | 'date' | 'note'>
 
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
+
+export interface WorkflowApprovalRequest {
+  id: string
+  universityId: number
+  universityName: string
+  programId: number
+  programName: string
+  stageId: number
+  stageTitle: string
+  fromStatus: StageStatus
+  toStatus: StageStatus
+  update: WorkflowStageUpdate
+  requestedById: number
+  requestedByName: string
+  requestedAt: string
+  status: ApprovalStatus
+  reviewedByName?: string
+  reviewedAt?: string
+  reviewComment?: string
+}
+
 export type TaskPriority = 'low' | 'normal' | 'high'
 export interface TaskInput {
   universityId: number
