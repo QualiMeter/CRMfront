@@ -1,5 +1,9 @@
 .analytics-workspace { padding-bottom: 52px; }
 .analytics-heading { align-items: flex-end; }
+.analytics-heading-actions { display: grid; grid-template-columns: minmax(220px,1fr) auto; gap: 8px 10px; align-items: end; }
+.analytics-export-actions { display: flex; gap: 7px; }
+.analytics-export-actions .outline-button { white-space: nowrap; }
+.analytics-export-message { grid-column: 1 / -1; justify-self: end; color: #667085; font-size: 9px; }
 .analytics-scope { min-width: 220px; display: grid; gap: 6px; color: #667085; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
 .analytics-scope select { height: 38px; border: 1px solid #d0d5dd; border-radius: 8px; background: #fff; color: #344054; padding: 0 11px; font-size: 11px; text-transform: none; letter-spacing: 0; outline: none; }
 .analytics-scope select:focus { border-color: #f97066; box-shadow: 0 0 0 3px #fee4e2; }
@@ -108,3 +112,5 @@ button.analytics-risk-card:hover { border-color: #d0d5dd; transform: translateY(
   .analytics-risk-list { grid-template-columns: 1fr; }
   .workflow-state-row, .product-analytics-row { grid-template-columns: 1fr; }
 }
+
+@media(max-width:720px){.analytics-heading-actions{grid-template-columns:1fr;width:100%}.analytics-export-actions{display:grid;grid-template-columns:1fr 1fr}.analytics-export-message{justify-self:start}}
