@@ -49,9 +49,17 @@ export interface WorkflowTemplateInput {
   statusLabels: Record<StageStatus, string>
 }
 
+export interface ItDirection {
+  id: number
+  name: string
+  code?: string
+}
+
 export interface Program {
   id: number
   universityId: number
+  directionId?: number
+  direction?: string
   name: string
   product: string
   students: number
@@ -98,6 +106,7 @@ export interface UniversityInput {
 
 export interface ProgramInput {
   universityId: number
+  directionId?: number
   name: string
   product: string
   students: number
