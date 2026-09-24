@@ -32,6 +32,12 @@ export interface WorkflowTemplateStage {
   shortTitle: string
 }
 
+export interface WorkflowBranchRule {
+  fromOrder: number
+  toOrder: number
+  label: string
+}
+
 export interface WorkflowTemplate {
   id: number
   name: string
@@ -39,6 +45,7 @@ export interface WorkflowTemplate {
   isSystem: boolean
   updatedAt: string
   stages: WorkflowTemplateStage[]
+  branches: WorkflowBranchRule[]
   statusLabels: Record<StageStatus, string>
 }
 
@@ -46,6 +53,7 @@ export interface WorkflowTemplateInput {
   name: string
   description: string
   stages: Array<Pick<WorkflowTemplateStage, 'title' | 'shortTitle'>>
+  branches: WorkflowBranchRule[]
   statusLabels: Record<StageStatus, string>
 }
 
@@ -68,6 +76,7 @@ export interface Program {
   demand: number
   stage: string
   workflow: WorkflowStage[]
+  branchRules?: WorkflowBranchRule[]
   statusLabels?: Record<StageStatus, string>
 }
 
@@ -143,9 +152,11 @@ export type DocumentUpdate = Partial<Pick<CrmDocument, 'programId' | 'category' 
 export type WorkflowStageUpdate = Pick<WorkflowStage, 'status' | 'owner' | 'date' | 'note'>
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
+export type WorkflowTransitionKind = 'status_change' | 'rollback'
 
 export interface WorkflowApprovalRequest {
   id: string
+  kind?: WorkflowTransitionKind
   universityId: number
   universityName: string
   programId: number
@@ -155,6 +166,9 @@ export interface WorkflowApprovalRequest {
   fromStatus: StageStatus
   toStatus: StageStatus
   update: WorkflowStageUpdate
+  targetStageId?: number
+  targetStageTitle?: string
+  targetStageUpdate?: WorkflowStageUpdate
   requestedById: number
   requestedByName: string
   requestedAt: string
