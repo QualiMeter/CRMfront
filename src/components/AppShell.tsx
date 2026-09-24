@@ -16,6 +16,7 @@ const crmSecondaryItems = [
   { label: 'Импорт', icon: 'plus' as const, path: '/import' },
   { label: 'Процессы', icon: 'grid' as const, path: '/workflows' },
   { label: 'Пользователи', icon: 'users' as const, path: '/users' },
+  { label: 'Студенты', icon: 'users' as const, path: '/student-registry' },
   { label: 'Задачи', icon: 'check' as const, path: '/tasks' },
   { label: 'Документы', icon: 'file' as const, path: '/documents' },
 ]
@@ -42,7 +43,7 @@ function primaryRole(roles: string[]) {
 }
 
 function breadcrumb(path: string) {
-  const map: Record<string, string> = {'/':'Обзор','/profile':'Мой профиль','/universities':'Вузы','/programs':'Программы','/my-program':'Моя программа','/students':'Студенты','/analytics':'Аналитика','/reports':'Отчеты','/integrations':'Интеграции','/approvals':'Согласования','/import':'Импорт','/workflows':'Процессы','/users':'Пользователи','/tasks':'Задачи','/documents':'Документы'}
+  const map: Record<string, string> = {'/':'Обзор','/profile':'Мой профиль','/universities':'Вузы','/programs':'Программы','/my-program':'Моя программа','/students':'Студенты','/analytics':'Аналитика','/reports':'Отчеты','/integrations':'Интеграции','/approvals':'Согласования','/import':'Импорт','/workflows':'Процессы','/users':'Пользователи','/student-registry':'Студенты','/tasks':'Задачи','/documents':'Документы'}
   return path.startsWith('/universities/') ? 'Карточка вуза' : map[path] ?? 'Раздел'
 }
 
@@ -98,7 +99,8 @@ export function AppShell({ children, path, navigate, taskCount, approvalCount = 
     else if ((value.includes('соглас') || value.includes('approval') || value.includes('подтвержд')) && canUseCrm) navigate('/approvals')
     else if ((value.includes('импорт') || value.includes('excel')) && canUseCrm) navigate('/import')
     else if ((value.includes('процесс') || value.includes('workflow')) && canManageContent) navigate('/workflows')
-    else if ((value.includes('пользов') || value.includes('сотруд') || value.includes('роль') || value.includes('студент')) && canManageUsers) navigate('/users')
+    else if ((value.includes('реестр студент') || value.includes('список студент') || value.includes('обучающ')) && canUseCrm) navigate('/student-registry')
+    else if ((value.includes('пользов') || value.includes('сотруд') || value.includes('роль')) && canManageUsers) navigate('/users')
     else if (value.includes('программ') || value.includes('курс')) navigate('/programs')
     else if (value.includes('профил') || value.includes('аккаунт')) navigate('/profile')
     else if (value.includes('вуз') || value.includes('универ')) navigate('/universities')
