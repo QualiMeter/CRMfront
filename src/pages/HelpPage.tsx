@@ -33,7 +33,7 @@ export function HelpPage({ navigate }: { navigate: Navigate }) {
     <section className="help-two-column">
       <article className="card help-section">
         <div className="help-section-heading"><span>02</span><div><h2>Согласование статуса</h2><p>Контроль изменений workflow.</p></div></div>
-        <p>КАМ сохраняет данные этапа, но новый статус не вступает в силу сразу. В разделе «Согласования» создаётся запрос. Администратор подтверждает или отклоняет переход и может оставить комментарий.</p>
+        <p>КАМ сохраняет данные этапа, но новый статус не вступает в силу сразу. В разделе «Согласования» создаётся запрос. Туда же попадает возврат процесса на предыдущий этап. Администратор подтверждает или отклоняет переход и может оставить комментарий.</p>
         <button className="outline-button" onClick={() => navigate('/approvals')}>Открыть согласования</button>
       </article>
       <article className="card help-section">
@@ -69,7 +69,7 @@ export function HelpPage({ navigate }: { navigate: Navigate }) {
       <div className="help-section-heading"><span>07</span><div><h2>Администрирование</h2><p>Роли, процессы и контроль доступа.</p></div></div>
       <div className="help-admin-links">
         <button onClick={() => navigate('/users')}><Icon name="users" size={18}/><span><strong>Пользователи</strong><small>КАМы, руководители, администраторы и области доступа</small></span></button>
-        <button onClick={() => navigate('/workflows')}><Icon name="grid" size={18}/><span><strong>Шаблоны процессов</strong><small>Новые версии применяются только к новым взаимодействиям</small></span></button>
+        <button onClick={() => navigate('/workflows')}><Icon name="grid" size={18}/><span><strong>Шаблоны процессов</strong><small>Новые версии применяются только к новым взаимодействиям; в шаблоне можно заранее задать альтернативные ветки</small></span></button>
         <button onClick={() => navigate('/documents')}><Icon name="file" size={18}/><span><strong>Документы</strong><small>Версии, категории, статусы и привязка к программам</small></span></button>
       </div>
     </section>
