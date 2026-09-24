@@ -150,7 +150,7 @@ export interface CrmTask extends TaskInput {
 }
 export type TaskUpdate = Partial<Omit<TaskInput, 'universityId'>> & { status?: CrmTask['status'] }
 
-export type UserRole = 'user' | 'student' | 'teacher' | 'manager' | 'admin'
+export type UserRole = 'user' | 'student' | 'teacher' | 'manager' | 'leader' | 'admin'
 export type UserStatus = 'active' | 'invited' | 'blocked'
 
 export interface InvitationLink {
