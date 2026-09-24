@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "demo:seed": "node scripts/seed-demo-accounts.mjs"
   },
   "dependencies": {
     "@e965/xlsx": "^0.20.3",
