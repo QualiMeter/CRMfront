@@ -19,7 +19,7 @@ export function ProgramWorkflow({ program, onSave, onUpload, onDeleteAttachment,
 
   return <div className="dashboard-grid program-workflow">
     <section className="card workflow-card">
-      <div className="card-header"><div><h2>Этапы программы</h2><p>{program.name} · {program.product}</p></div><span className="workflow-count">{done} из {program.workflow.length} выполнено</span></div>
+      <div className="card-header"><div><h2>Этапы программы</h2><p>{program.direction || 'Без направления'} · {program.name} · {program.product}</p></div><span className="workflow-count">{done} из {program.workflow.length} выполнено</span></div>
       <div className="workflow-progress"><progress aria-label="Прогресс программы" max={100} value={workflowProgress(program.workflow)} /><strong>{workflowProgress(program.workflow)}%</strong></div>
       <label className="mobile-stage-picker">Выбрать этап<select disabled={saving} value={selected.id} onChange={event => setSelectedId(Number(event.target.value))}>{program.workflow.map(stage => <option key={stage.id} value={stage.id}>{stage.order}. {stage.title} — {statusLabels[stage.status]}</option>)}</select></label>
       <div className="workflow">{program.workflow.map(stage => <button key={stage.id} disabled={saving} aria-pressed={selected.id === stage.id} aria-label={`${stage.order}. ${stage.title}: ${statusLabels[stage.status]}`} className={`stage ${stage.status} ${selected.id === stage.id ? 'selected' : ''}`} onClick={() => setSelectedId(stage.id)}>
