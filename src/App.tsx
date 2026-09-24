@@ -12,6 +12,7 @@ import { SectionPage } from './pages/SectionPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { DocumentsPage } from './pages/DocumentsPage'
 import { ProfilePage } from './pages/ProfilePage'
+import { HelpPage } from './pages/HelpPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { ImportPage } from './pages/ImportPage'
 import { IntegrationsPage } from './pages/IntegrationsPage'
@@ -372,6 +373,7 @@ function App() {
   let content: ReactNode
   if (loading) content = <div className="content"><div className="loading card" role="status">Загрузка данных…</div></div>
   else if (error) content = <div className="content"><div className="loading card"><p role="alert">{error}</p><button className="outline-button" onClick={() => setRetry(value => value + 1)}>Повторить загрузку</button></div></div>
+  else if (path === '/help') content = <HelpPage navigate={navigate} />
   else if (activeRole === 'user') content = path === '/profile' ? <ProfilePage currentUser={currentUser} onOpenSettings={() => setSettingsSignal(value => value + 1)} /> : <PendingRolePage user={session.user} onCheckRole={async () => primaryRole((await refreshCurrentSession())?.user.roles ?? []) !== 'user'} />
   else if (activeRole === 'student' && studentProfile) {
     const ownUniversity = universities.find(item => item.id === studentProfile.universityId)
