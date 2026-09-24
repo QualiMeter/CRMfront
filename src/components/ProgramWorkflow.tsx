@@ -3,11 +3,12 @@ import { Icon } from './Icon'
 import { currentStage, stageStatusLabels, workflowProgress } from '../domain/workflow'
 import type { Program, WorkflowStage, WorkflowStageUpdate } from '../types/domain'
 
-export function ProgramWorkflow({ program, onSave, onUpload, onDeleteAttachment }: {
+export function ProgramWorkflow({ program, onSave, onUpload, onDeleteAttachment, requiresStatusApproval = false }: {
   program: Program
-  onSave: (stageId: number, update: WorkflowStageUpdate) => Promise<void>
+  onSave: (stageId: number, update: WorkflowStageUpdate) => Promise<string | void>
   onUpload: (stageId: number, file: File) => Promise<void>
   onDeleteAttachment: (stageId: number, attachmentId: string) => Promise<void>
+  requiresStatusApproval?: boolean
 }) {
   const [selectedId, setSelectedId] = useState(currentStage(program.workflow)?.id)
   const [saving, setSaving] = useState(false)
@@ -26,9 +27,9 @@ export function ProgramWorkflow({ program, onSave, onUpload, onDeleteAttachment 
         <span className="stage-copy"><strong>{stage.shortTitle}</strong><span>{statusLabels[stage.status]}</span></span>
       </button>)}</div>
     </section>
-    <StageEditor key={selected.id} stage={selected} statusLabels={statusLabels} onUpload={file => onUpload(selected.id, file)} onDeleteAttachment={attachmentId => onDeleteAttachment(selected.id, attachmentId)} onSave={async update => {
+    <StageEditor key={selected.id} stage={selected} statusLabels={statusLabels} requiresStatusApproval={requiresStatusApproval} onUpload={file => onUpload(selected.id, file)} onDeleteAttachment={attachmentId => onDeleteAttachment(selected.id, attachmentId)} onSave={async update => {
       setSaving(true)
-      try { await onSave(selected.id, update) } finally { setSaving(false) }
+      try { return await onSave(selected.id, update) } finally { setSaving(false) }
     }} />
   </div>
 }
@@ -39,12 +40,13 @@ function formatFileSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} МБ`
 }
 
-function StageEditor({ stage, statusLabels, onSave, onUpload, onDeleteAttachment }: {
+function StageEditor({ stage, statusLabels, onSave, onUpload, onDeleteAttachment, requiresStatusApproval }: {
   stage: WorkflowStage
   statusLabels: Record<WorkflowStage['status'], string>
-  onSave: (update: WorkflowStageUpdate) => Promise<void>
+  onSave: (update: WorkflowStageUpdate) => Promise<string | void>
   onUpload: (file: File) => Promise<void>
   onDeleteAttachment: (attachmentId: string) => Promise<void>
+  requiresStatusApproval: boolean
 }) {
   const [draft, setDraft] = useState<WorkflowStageUpdate>({ status: stage.status, owner: stage.owner ?? '', date: stage.date ?? '', note: stage.note ?? '' })
   const [saving, setSaving] = useState(false)
@@ -64,8 +66,8 @@ function StageEditor({ stage, statusLabels, onSave, onUpload, onDeleteAttachment
     setMessage('')
     setError('')
     try {
-      await onSave(draft)
-      setMessage('Изменения сохранены')
+      const result = await onSave(draft)
+      setMessage(result || 'Изменения сохранены')
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Не удалось сохранить изменения. Попробуйте ещё раз.')
     } finally { setSaving(false) }
@@ -95,7 +97,7 @@ function StageEditor({ stage, statusLabels, onSave, onUpload, onDeleteAttachment
         <label>Ответственный<input maxLength={120} value={draft.owner} onChange={event => change({ owner: event.target.value })} placeholder="Фамилия и инициалы" /></label>
         <label>Дата начала<input type="date" value={draft.date} onChange={event => change({ date: event.target.value })} /></label>
         <label>Комментарий<textarea maxLength={2000} rows={3} value={draft.note} onChange={event => change({ note: event.target.value })} placeholder="Результат этапа или следующий шаг" /></label>
-        <button className="primary-button" type="submit">{saving ? 'Сохранение…' : 'Сохранить этап'}</button>
+        <button className="primary-button" type="submit">{saving ? 'Сохранение…' : requiresStatusApproval && draft.status !== stage.status ? 'Отправить на согласование' : 'Сохранить этап'}</button>
       </fieldset>
       <div className="stage-attachments">
         <div className="stage-attachments-heading"><div><strong>Вложения этапа</strong><span>{stage.attachments?.length ?? 0} файлов</span></div><button type="button" className="stage-upload-button" disabled={uploading} onClick={() => fileInput.current?.click()}><Icon name="plus" size={15} />{uploading ? 'Загрузка…' : 'Прикрепить'}</button></div>
@@ -105,7 +107,7 @@ function StageEditor({ stage, statusLabels, onSave, onUpload, onDeleteAttachment
       </div>
       <p className="save-message" role="status">{message}</p>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <p className="demo-note">Изменения этапов сохраняются на backend.</p>
+      <p className="demo-note">{requiresStatusApproval ? 'Комментарии, ответственный и дата сохраняются сразу. Смена статуса вступит в силу только после подтверждения администратора.' : 'Администратор может подтвердить изменение статуса непосредственно.'}</p>
     </form>
   </section>
 }
