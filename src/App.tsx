@@ -54,7 +54,7 @@ import './portal.css'
 const currentLocation = () => window.location.pathname + window.location.search
 
 function primaryRole(roles: string[]) {
-  return roles.includes('admin') ? 'admin' : roles.includes('manager') ? 'manager' : roles.includes('teacher') ? 'teacher' : roles.includes('student') ? 'student' : 'user'
+  return roles.includes('admin') ? 'admin' : roles.includes('leader') ? 'leader' : roles.includes('manager') ? 'manager' : roles.includes('teacher') ? 'teacher' : roles.includes('student') ? 'student' : 'user'
 }
 
 function App() {
@@ -119,8 +119,9 @@ function App() {
     async function load() {
       try {
         const activeRole = primaryRole(authenticatedUser.roles)
-        const canManageUsers = activeRole === 'admin' || activeRole === 'manager'
-        const canManageContent = canManageUsers
+        const canUseCrm = activeRole === 'admin' || activeRole === 'leader' || activeRole === 'manager'
+        const canManageUsers = activeRole === 'admin' || activeRole === 'leader'
+        const canManageContent = activeRole === 'admin' || activeRole === 'leader'
         if (activeRole === 'student' || activeRole === 'teacher') {
           const profile = activeRole === 'student'
             ? await api.getMyStudentProfile().catch(() => ({ userId: authenticatedUser.id, email: authenticatedUser.email, fullName: authenticatedUser.full_name, status: 'active' } as StudentProfile))
@@ -186,8 +187,10 @@ function App() {
 
   if (!session) return <AuthPage onAuthenticated={nextSession => { setLocation(currentLocation()); setSession(nextSession) }} />
   const activeRole = primaryRole(session.user.roles)
-  const canManageContent = activeRole === 'admin' || activeRole === 'manager'
-  const managerMode = activeRole === 'manager'
+  const canUseCrm = activeRole === 'admin' || activeRole === 'leader' || activeRole === 'manager'
+  const canManageContent = activeRole === 'admin' || activeRole === 'leader'
+  const canManageUsers = activeRole === 'admin' || activeRole === 'leader'
+  const leaderMode = activeRole === 'leader'
 
   async function saveStage(programId: number, stageId: number, update: WorkflowStageUpdate) {
     if (!details) throw new Error('Откройте карточку вуза заново')
@@ -310,18 +313,18 @@ function App() {
   }
   else if (path === '/') content = <OverviewPage universities={universities} programs={allPrograms} activities={allActivities} tasks={tasks} onOpenUniversity={id => navigate(`/universities/${id}`)} onOpenUniversities={() => navigate('/universities')} onOpenPrograms={() => navigate('/programs')} onOpenTasks={() => navigate('/tasks')} onOpenAnalytics={() => navigate('/analytics')} />
   else if (path === '/profile') content = <ProfilePage currentUser={session.user} onOpenSettings={() => setSettingsSignal(value => value + 1)} />
-  else if (path === '/universities') content = <UniversitiesPage universities={universities} canCreate={canManageContent} initialQuery={url.searchParams.get('search') ?? ''} onCreate={createUniversity} onOpen={id => navigate(`/universities/${id}`)} />
+  else if (path === '/universities') content = <UniversitiesPage universities={universities} canCreate={canUseCrm} initialQuery={url.searchParams.get('search') ?? ''} onCreate={createUniversity} onOpen={id => navigate(`/universities/${id}`)} />
   else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onUploadStageAttachment={uploadStageAttachment} onDeleteStageAttachment={deleteStageAttachment} onCreateTask={createTask} onUpdateTask={updateTask} onOpenPrograms={() => navigate('/programs')} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
   else if (path === '/tasks') content = <div className="content"><div className="page-heading"><div><div className="eyebrow">РАБОЧИЙ ЦЕНТР</div><h1>Задачи</h1><p className="muted">Поручения по всем учебным заведениям и программам</p></div></div><TasksPanel tasks={tasks} universities={universities} programs={allPrograms} onCreate={createTask} onUpdate={updateTask} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /></div>
   else if (path === '/documents') content = <DocumentsPage documents={documents} programs={allPrograms} universities={universities} onCreate={createDocument} onUpdate={updateDocument} onDelete={deleteDocument} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/analytics') content = <AnalyticsPage universities={universities} programs={allPrograms} tasks={tasks} documents={documents} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} onOpenTasks={() => navigate('/tasks')} onOpenDocuments={() => navigate('/documents')} />
   else if (path === '/reports') content = <ReportsPage universities={universities} programs={allPrograms} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
-  else if (path === '/import') content = canManageContent ? <ImportPage universities={universities} onImportUniversities={importUniversities} onImportPrograms={importPrograms} /> : <div className="content"><div className="loading card"><p role="alert">Импорт доступен менеджерам и администраторам.</p></div></div>
-  else if (path === '/workflows') content = canManageContent ? <WorkflowsPage templates={workflowTemplates} universities={universities} programs={allPrograms} onCreate={createWorkflowTemplate} onUpdate={updateWorkflowTemplate} onDelete={deleteWorkflowTemplate} onApply={applyWorkflowTemplate} /> : <div className="content"><div className="loading card"><p role="alert">Управление процессами доступно менеджерам и администраторам.</p></div></div>
-  else if (path === '/users') content = canManageContent
-    ? <UsersPage users={managerMode ? users.filter(user => user.role === 'user' || ((user.role === 'student' || user.role === 'teacher') && user.universityIds.some(id => universities.some(university => university.id === id)))) : users} universities={universities} managerMode={managerMode} onCreate={createUser} onUpdate={updateUser} onInvite={inviteUser} onRevokeInvite={revokeUserInvite} />
-    : <div className="content"><div className="loading card"><p role="alert">Раздел доступен менеджерам и администраторам.</p></div></div>
-  else if (path === '/programs') content = <SectionPage section="programs" canCreate={canManageContent} programs={allPrograms} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
+  else if (path === '/import') content = canUseCrm ? <ImportPage universities={universities} onImportUniversities={importUniversities} onImportPrograms={importPrograms} /> : <div className="content"><div className="loading card"><p role="alert">Импорт доступен КАМам, руководителям и администраторам.</p></div></div>
+  else if (path === '/workflows') content = canManageContent ? <WorkflowsPage templates={workflowTemplates} universities={universities} programs={allPrograms} onCreate={createWorkflowTemplate} onUpdate={updateWorkflowTemplate} onDelete={deleteWorkflowTemplate} onApply={applyWorkflowTemplate} /> : <div className="content"><div className="loading card"><p role="alert">Управление шаблонами процессов доступно руководителям и администраторам.</p></div></div>
+  else if (path === '/users') content = canManageUsers
+    ? <UsersPage users={users} universities={universities} leaderMode={leaderMode} onCreate={createUser} onUpdate={updateUser} onInvite={inviteUser} onRevokeInvite={revokeUserInvite} />
+    : <div className="content"><div className="loading card"><p role="alert">Управление пользователями доступно руководителям и администраторам.</p></div></div>
+  else if (path === '/programs') content = <SectionPage section="programs" canCreate={canUseCrm} programs={allPrograms} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else content = <div className="content"><div className="loading card">Раздел не найден.</div></div>
 
   return <AppShell currentUser={session.user} onLogout={async () => { await logout(); setSession(null) }} settingsSignal={settingsSignal} taskCount={tasks.filter(task => task.status === 'open').length} path={path} navigate={navigate}>{content}</AppShell>
