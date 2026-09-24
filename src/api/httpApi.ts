@@ -390,6 +390,7 @@ async function patchRow<T extends Row>(name: string, id: number, payload: Row): 
 const userRole = (roles: unknown): CrmUser['role'] => {
   const values = Array.isArray(roles) ? roles.map(String) : []
   if (values.includes('admin')) return 'admin'
+  if (values.includes('leader')) return 'leader'
   if (values.includes('manager')) return 'manager'
   if (values.includes('teacher')) return 'teacher'
   if (values.includes('student')) return 'student'
