@@ -11,6 +11,7 @@ const crmNavItems = [
 ]
 const crmSecondaryItems = [
   { label: 'Отчеты', icon: 'file' as const, path: '/reports' },
+  { label: 'Интеграции', icon: 'arrow' as const, path: '/integrations' },
   { label: 'Импорт', icon: 'plus' as const, path: '/import' },
   { label: 'Процессы', icon: 'grid' as const, path: '/workflows' },
   { label: 'Пользователи', icon: 'users' as const, path: '/users' },
@@ -40,7 +41,7 @@ function primaryRole(roles: string[]) {
 }
 
 function breadcrumb(path: string) {
-  const map: Record<string, string> = {'/':'Обзор','/profile':'Мой профиль','/universities':'Вузы','/programs':'Программы','/my-program':'Моя программа','/students':'Студенты','/analytics':'Аналитика','/reports':'Отчеты','/import':'Импорт','/workflows':'Процессы','/users':'Пользователи','/tasks':'Задачи','/documents':'Документы'}
+  const map: Record<string, string> = {'/':'Обзор','/profile':'Мой профиль','/universities':'Вузы','/programs':'Программы','/my-program':'Моя программа','/students':'Студенты','/analytics':'Аналитика','/reports':'Отчеты','/integrations':'Интеграции','/import':'Импорт','/workflows':'Процессы','/users':'Пользователи','/tasks':'Задачи','/documents':'Документы'}
   return path.startsWith('/universities/') ? 'Карточка вуза' : map[path] ?? 'Раздел'
 }
 
@@ -92,6 +93,7 @@ export function AppShell({ children, path, navigate, taskCount, settingsSignal =
     else if (value.includes('док')) navigate('/documents')
     else if (value.includes('анал')) navigate('/analytics')
     else if (value.includes('отч')) navigate('/reports')
+    else if ((value.includes('интеграц') || value.includes('lms') || value.includes('сайт') || value.includes('cms')) && canUseCrm) navigate('/integrations')
     else if ((value.includes('импорт') || value.includes('excel')) && canUseCrm) navigate('/import')
     else if ((value.includes('процесс') || value.includes('workflow')) && canManageContent) navigate('/workflows')
     else if ((value.includes('пользов') || value.includes('сотруд') || value.includes('роль') || value.includes('студент')) && canManageUsers) navigate('/users')
