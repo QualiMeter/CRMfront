@@ -397,9 +397,20 @@ const userRole = (roles: unknown): CrmUser['role'] => {
 }
 
 function mapInvitation(row: Row): InvitationLink {
+  const rawUrl = text(row.invite_url)
+  let inviteUrl = rawUrl
+  try {
+    const parsed = new URL(rawUrl, window.location.origin)
+    const pathToken = parsed.pathname.match(/\/(?:invite|accept-invite)\/([^/?#]+)/)?.[1]
+    const token = pathToken ? decodeURIComponent(pathToken) : parsed.searchParams.get('token')
+    if (token) inviteUrl = `${window.location.origin}/invite/${encodeURIComponent(token)}`
+  } catch {
+    // Keep the backend value if it is not a valid URL. The UI can still show
+    // the response instead of silently losing the invitation.
+  }
   return {
     message: text(row.message, 'Приглашение создано'),
-    inviteUrl: text(row.invite_url),
+    inviteUrl,
     expiresAt: text(row.expires_at),
   }
 }
