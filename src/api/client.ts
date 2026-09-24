@@ -17,6 +17,7 @@ import type {
   CrmUserInput,
   CrmUserUpdate,
   InvitationLink,
+  ItDirection,
   StudentProfile,
   StudentProfileInput,
   TeacherProfile,
@@ -44,6 +45,7 @@ export interface ApiClient {
   updateMyTeacherProfile(input: TeacherProfileInput): Promise<TeacherProfile>
   getTeachers(): Promise<TeacherProfile[]>
   getTasks(): Promise<CrmTask[]>
+  getItDirections(): Promise<ItDirection[]>
   createTask(input: TaskInput): Promise<CrmTask>
   updateTask(id: number, update: TaskUpdate): Promise<CrmTask>
 
