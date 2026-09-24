@@ -16,6 +16,11 @@ import type {
   CrmUser,
   CrmUserInput,
   CrmUserUpdate,
+  InvitationLink,
+  StudentProfile,
+  StudentProfileInput,
+  TeacherProfile,
+  TeacherProfileInput,
 } from '../types/domain'
 
 export interface UniversityDetails {
@@ -30,6 +35,14 @@ export interface ApiClient {
   getUsers(): Promise<CrmUser[]>
   createUser(input: CrmUserInput): Promise<CrmUser>
   updateUser(id: number, update: CrmUserUpdate): Promise<CrmUser>
+  inviteUser(id: number): Promise<InvitationLink>
+  revokeUserInvite(id: number): Promise<void>
+  getMyStudentProfile(): Promise<StudentProfile>
+  updateMyStudentProfile(input: StudentProfileInput): Promise<StudentProfile>
+  getStudents(): Promise<StudentProfile[]>
+  getMyTeacherProfile(): Promise<TeacherProfile>
+  updateMyTeacherProfile(input: TeacherProfileInput): Promise<TeacherProfile>
+  getTeachers(): Promise<TeacherProfile[]>
   getTasks(): Promise<CrmTask[]>
   createTask(input: TaskInput): Promise<CrmTask>
   updateTask(id: number, update: TaskUpdate): Promise<CrmTask>

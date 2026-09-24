@@ -3,7 +3,7 @@ import { Icon } from '../components/Icon'
 import { getProfile, profileInitials, saveProfile, type CrmProfile } from '../profile'
 import type { AuthUser } from '../api/auth'
 
-const roleNames: Record<string, string> = { user: 'Пользователь', manager: 'Менеджер', admin: 'Администратор' }
+const roleNames: Record<string, string> = { user: 'Ожидает роли', student: 'Студент', teacher: 'Преподаватель', manager: 'Менеджер', admin: 'Администратор' }
 
 function profileFromUser(user: AuthUser): CrmProfile {
   const preferences = getProfile()

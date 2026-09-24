@@ -150,8 +150,14 @@ export interface CrmTask extends TaskInput {
 }
 export type TaskUpdate = Partial<Omit<TaskInput, 'universityId'>> & { status?: CrmTask['status'] }
 
-export type UserRole = 'user' | 'manager' | 'admin'
+export type UserRole = 'user' | 'student' | 'teacher' | 'manager' | 'admin'
 export type UserStatus = 'active' | 'invited' | 'blocked'
+
+export interface InvitationLink {
+  message: string
+  inviteUrl: string
+  expiresAt: string
+}
 
 export interface CrmUserInput {
   name: string
@@ -167,3 +173,33 @@ export interface CrmUser extends CrmUserInput {
 }
 
 export type CrmUserUpdate = Partial<Pick<CrmUser, 'name' | 'role' | 'status' | 'universityIds'>>
+
+export interface StudentProfile {
+  userId: number
+  email: string
+  fullName: string
+  status: string
+  studentNumber?: string
+  universityId?: number
+  programId?: number
+  courseYear?: number
+  groupName?: string
+  enrollmentYear?: number
+  graduationYear?: number
+}
+
+export type StudentProfileInput = Omit<StudentProfile, 'userId' | 'email' | 'fullName' | 'status'>
+
+export interface TeacherProfile {
+  userId: number
+  email: string
+  fullName: string
+  status: string
+  employeeNumber?: string
+  universityId?: number
+  department?: string
+  academicTitle?: string
+  specialization?: string
+}
+
+export type TeacherProfileInput = Omit<TeacherProfile, 'userId' | 'email' | 'fullName' | 'status'>

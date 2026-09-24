@@ -21,6 +21,11 @@ import type {
   CrmUser,
   CrmUserInput,
   CrmUserUpdate,
+  InvitationLink,
+  StudentProfile,
+  StudentProfileInput,
+  TeacherProfile,
+  TeacherProfileInput,
 } from '../types/domain'
 
 const API_URL = (import.meta.env.VITE_API_URL || 'https://crmbackend-hw.up.railway.app').replace(/\/$/, '')
@@ -384,7 +389,71 @@ async function patchRow<T extends Row>(name: string, id: number, payload: Row): 
 
 const userRole = (roles: unknown): CrmUser['role'] => {
   const values = Array.isArray(roles) ? roles.map(String) : []
-  return values.includes('admin') ? 'admin' : values.includes('manager') ? 'manager' : 'user'
+  if (values.includes('admin')) return 'admin'
+  if (values.includes('manager')) return 'manager'
+  if (values.includes('teacher')) return 'teacher'
+  if (values.includes('student')) return 'student'
+  return 'user'
+}
+
+function mapInvitation(row: Row): InvitationLink {
+  return {
+    message: text(row.message, 'Приглашение создано'),
+    inviteUrl: text(row.invite_url),
+    expiresAt: text(row.expires_at),
+  }
+}
+
+function mapStudentProfile(row: Row): StudentProfile {
+  return {
+    userId: number(row.user_id),
+    email: text(row.email),
+    fullName: text(row.full_name),
+    status: text(row.status, 'active'),
+    studentNumber: text(row.student_number) || undefined,
+    universityId: nullableNumber(row.university_id),
+    programId: nullableNumber(row.program_id),
+    courseYear: nullableNumber(row.course_year),
+    groupName: text(row.group_name) || undefined,
+    enrollmentYear: nullableNumber(row.enrollment_year),
+    graduationYear: nullableNumber(row.graduation_year),
+  }
+}
+
+function studentProfilePayload(input: StudentProfileInput): Row {
+  return {
+    student_number: input.studentNumber ?? null,
+    university_id: input.universityId ?? null,
+    program_id: input.programId ?? null,
+    course_year: input.courseYear ?? null,
+    group_name: input.groupName ?? null,
+    enrollment_year: input.enrollmentYear ?? null,
+    graduation_year: input.graduationYear ?? null,
+  }
+}
+
+function mapTeacherProfile(row: Row): TeacherProfile {
+  return {
+    userId: number(row.user_id),
+    email: text(row.email),
+    fullName: text(row.full_name),
+    status: text(row.status, 'active'),
+    employeeNumber: text(row.employee_number) || undefined,
+    universityId: nullableNumber(row.university_id),
+    department: text(row.department) || undefined,
+    academicTitle: text(row.academic_title) || undefined,
+    specialization: text(row.specialization) || undefined,
+  }
+}
+
+function teacherProfilePayload(input: TeacherProfileInput): Row {
+  return {
+    employee_number: input.employeeNumber ?? null,
+    university_id: input.universityId ?? null,
+    department: input.department ?? null,
+    academic_title: input.academicTitle ?? null,
+    specialization: input.specialization ?? null,
+  }
 }
 
 async function mapUsers(rows: Row[]): Promise<CrmUser[]> {
@@ -456,6 +525,30 @@ export const httpApi: ApiClient = {
       await syncUniversityAccess(id, role === 'admin' ? [] : (update.universityIds ?? existing.universityIds), role === 'manager')
     }
     return (await mapUsers([row]))[0]
+  },
+  async inviteUser(id: number) {
+    return mapInvitation(await request<Row>(`/api/v1/users/${id}/invite`, { method: 'POST' }))
+  },
+  async revokeUserInvite(id: number) {
+    await request<void>(`/api/v1/users/${id}/invite/revoke`, { method: 'POST' })
+  },
+  async getMyStudentProfile() {
+    return mapStudentProfile(await request<Row>('/api/v1/students/me'))
+  },
+  async updateMyStudentProfile(input: StudentProfileInput) {
+    return mapStudentProfile(await request<Row>('/api/v1/students/me', { method: 'PUT', body: JSON.stringify(studentProfilePayload(input)) }))
+  },
+  async getStudents() {
+    return (await request<Row[]>('/api/v1/students')).map(mapStudentProfile)
+  },
+  async getMyTeacherProfile() {
+    return mapTeacherProfile(await request<Row>('/api/v1/teachers/me'))
+  },
+  async updateMyTeacherProfile(input: TeacherProfileInput) {
+    return mapTeacherProfile(await request<Row>('/api/v1/teachers/me', { method: 'PUT', body: JSON.stringify(teacherProfilePayload(input)) }))
+  },
+  async getTeachers() {
+    return (await request<Row[]>('/api/v1/teachers')).map(mapTeacherProfile)
   },
 
   async getWorkflowTemplates() { return remoteWorkflowTemplates() },

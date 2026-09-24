@@ -17,6 +17,15 @@ import { ImportPage } from './pages/ImportPage'
 import { WorkflowsPage } from './pages/WorkflowsPage'
 import { UsersPage } from './pages/UsersPage'
 import { AuthPage } from './pages/AuthPage'
+import {
+  AcademicDocumentsPage,
+  AcademicProfilePage,
+  AcademicProgramsPage,
+  PendingRolePage,
+  StudentOverviewPage,
+  TeacherOverviewPage,
+  TeacherStudentsPage,
+} from './pages/AcademicPortalPages'
 import { getSession, logout, syncCurrentUser, type AuthSession } from './api/auth'
 import type {
   CrmDocument,
@@ -34,9 +43,19 @@ import type {
   CrmUser,
   CrmUserInput,
   CrmUserUpdate,
+  InvitationLink,
+  StudentProfile,
+  StudentProfileInput,
+  TeacherProfile,
+  TeacherProfileInput,
 } from './types/domain'
+import './portal.css'
 
 const currentLocation = () => window.location.pathname + window.location.search
+
+function primaryRole(roles: string[]) {
+  return roles.includes('admin') ? 'admin' : roles.includes('manager') ? 'manager' : roles.includes('teacher') ? 'teacher' : roles.includes('student') ? 'student' : 'user'
+}
 
 function App() {
   const [session, setSession] = useState<AuthSession | null>(() => getSession())
@@ -53,6 +72,9 @@ function App() {
   const [settingsSignal, setSettingsSignal] = useState(0)
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([])
   const [users, setUsers] = useState<CrmUser[]>([])
+  const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null)
+  const [teacherProfile, setTeacherProfile] = useState<TeacherProfile | null>(null)
+  const [students, setStudents] = useState<StudentProfile[]>([])
   const url = new URL(location, window.location.origin)
   const path = url.pathname
   const programId = url.searchParams.has('program') ? Number(url.searchParams.get('program')) : null
@@ -88,8 +110,30 @@ function App() {
     setDetails(null)
     async function load() {
       try {
-        const canManageUsers = authenticatedUser.roles.includes('admin')
-        const canManageContent = canManageUsers || authenticatedUser.roles.includes('manager')
+        const activeRole = primaryRole(authenticatedUser.roles)
+        const canManageUsers = activeRole === 'admin' || activeRole === 'manager'
+        const canManageContent = canManageUsers
+        if (activeRole === 'student' || activeRole === 'teacher') {
+          const profile = activeRole === 'student'
+            ? await api.getMyStudentProfile().catch(() => ({ userId: authenticatedUser.id, email: authenticatedUser.email, fullName: authenticatedUser.full_name, status: 'active' } as StudentProfile))
+            : await api.getMyTeacherProfile().catch(() => ({ userId: authenticatedUser.id, email: authenticatedUser.email, fullName: authenticatedUser.full_name, status: 'active' } as TeacherProfile))
+          const [list, documentList, studentList] = await Promise.all([
+            api.getUniversities().catch(() => []),
+            activeRole === 'student' && ['/', '/documents'].includes(path) ? api.getDocuments().catch(() => []) : Promise.resolve([]),
+            activeRole === 'teacher' && ['/', '/students'].includes(path) ? api.getStudents().catch(() => []) : Promise.resolve([]),
+          ])
+          const detailsList = await Promise.all(list.map(university => api.getUniversity(university.id).catch(() => null)))
+          if (cancelled) return
+          setUniversities(list)
+          setDocuments(documentList)
+          setStudents(studentList)
+          setAllPrograms(detailsList.flatMap(data => data?.programs ?? []))
+          setAllActivities([])
+          if (activeRole === 'student') setStudentProfile(profile as StudentProfile)
+          else setTeacherProfile(profile as TeacherProfile)
+          return
+        }
+        if (activeRole === 'user') return
         // The profile is entirely backed by /auth/me and must not be blocked by
         // an unrelated operational endpoint timing out.
         if (path === '/profile') return
@@ -132,7 +176,9 @@ function App() {
   }, [path, retry, session])
 
   if (!session) return <AuthPage onAuthenticated={nextSession => { setLocation(currentLocation()); setSession(nextSession) }} />
-  const canManageContent = session.user.roles.includes('admin') || session.user.roles.includes('manager')
+  const activeRole = primaryRole(session.user.roles)
+  const canManageContent = activeRole === 'admin' || activeRole === 'manager'
+  const managerMode = activeRole === 'manager'
 
   async function saveStage(programId: number, stageId: number, update: WorkflowStageUpdate) {
     if (!details) throw new Error('Откройте карточку вуза заново')
@@ -220,12 +266,39 @@ function App() {
     setAllPrograms(current => [...current.filter(program => program.universityId !== universityId), ...updated.programs])
     setAllActivities(current => [...updated.activities, ...current.filter(activity => activity.universityId !== universityId)])
   }
-  async function createUser(input: CrmUserInput) { await api.createUser(input); setUsers(await api.getUsers()) }
+  async function createUser(input: CrmUserInput): Promise<InvitationLink> {
+    const created = await api.createUser(input)
+    const invitation = await api.inviteUser(created.id)
+    setUsers(await api.getUsers())
+    return invitation
+  }
   async function updateUser(id: number, update: CrmUserUpdate) { await api.updateUser(id, update); setUsers(await api.getUsers()) }
+  async function inviteUser(id: number) { return api.inviteUser(id) }
+  async function revokeUserInvite(id: number) { await api.revokeUserInvite(id); setUsers(await api.getUsers()) }
+  async function saveStudentProfile(input: StudentProfileInput) { setStudentProfile(await api.updateMyStudentProfile(input)) }
+  async function saveTeacherProfile(input: TeacherProfileInput) { setTeacherProfile(await api.updateMyTeacherProfile(input)) }
 
   let content: ReactNode
   if (loading) content = <div className="content"><div className="loading card" role="status">Загрузка данных…</div></div>
   else if (error) content = <div className="content"><div className="loading card"><p role="alert">{error}</p><button className="outline-button" onClick={() => setRetry(value => value + 1)}>Повторить загрузку</button></div></div>
+  else if (activeRole === 'user') content = path === '/profile' ? <ProfilePage currentUser={session.user} onOpenSettings={() => setSettingsSignal(value => value + 1)} /> : <PendingRolePage user={session.user} />
+  else if (activeRole === 'student' && studentProfile) {
+    const ownUniversity = universities.find(item => item.id === studentProfile.universityId)
+    const ownProgram = allPrograms.find(item => item.id === studentProfile.programId)
+    if (path === '/profile') content = <AcademicProfilePage role="student" profile={studentProfile} universities={universities} programs={allPrograms} onSave={saveStudentProfile} />
+    else if (path === '/my-program' || path === '/programs') content = <AcademicProgramsPage title="Моя программа" programs={allPrograms} studentProgramId={studentProfile.programId} />
+    else if (path === '/documents') content = <AcademicDocumentsPage documents={documents} programId={studentProfile.programId} />
+    else content = <StudentOverviewPage profile={studentProfile} university={ownUniversity} program={ownProgram} documents={documents} navigate={navigate} />
+  }
+  else if (activeRole === 'teacher' && teacherProfile) {
+    const ownUniversity = universities.find(item => item.id === teacherProfile.universityId)
+    const ownPrograms = teacherProfile.universityId ? allPrograms.filter(item => item.universityId === teacherProfile.universityId) : allPrograms
+    const ownStudents = teacherProfile.universityId ? students.filter(item => item.universityId === teacherProfile.universityId) : students
+    if (path === '/profile') content = <AcademicProfilePage role="teacher" profile={teacherProfile} universities={universities} programs={ownPrograms} onSave={saveTeacherProfile} />
+    else if (path === '/students') content = <TeacherStudentsPage students={ownStudents} universities={universities} programs={ownPrograms} />
+    else if (path === '/programs') content = <AcademicProgramsPage title="Программы вуза" programs={ownPrograms} />
+    else content = <TeacherOverviewPage profile={teacherProfile} university={ownUniversity} programs={ownPrograms} students={ownStudents} navigate={navigate} />
+  }
   else if (path === '/') content = <OverviewPage universities={universities} programs={allPrograms} activities={allActivities} tasks={tasks} onOpenUniversity={id => navigate(`/universities/${id}`)} onOpenUniversities={() => navigate('/universities')} onOpenPrograms={() => navigate('/programs')} onOpenTasks={() => navigate('/tasks')} onOpenAnalytics={() => navigate('/analytics')} />
   else if (path === '/profile') content = <ProfilePage currentUser={session.user} onOpenSettings={() => setSettingsSignal(value => value + 1)} />
   else if (path === '/universities') content = <UniversitiesPage universities={universities} canCreate={canManageContent} initialQuery={url.searchParams.get('search') ?? ''} onCreate={createUniversity} onOpen={id => navigate(`/universities/${id}`)} />
@@ -236,9 +309,9 @@ function App() {
   else if (path === '/reports') content = <ReportsPage universities={universities} programs={allPrograms} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/import') content = canManageContent ? <ImportPage universities={universities} onImportUniversities={importUniversities} onImportPrograms={importPrograms} /> : <div className="content"><div className="loading card"><p role="alert">Импорт доступен менеджерам и администраторам.</p></div></div>
   else if (path === '/workflows') content = canManageContent ? <WorkflowsPage templates={workflowTemplates} universities={universities} programs={allPrograms} onCreate={createWorkflowTemplate} onUpdate={updateWorkflowTemplate} onDelete={deleteWorkflowTemplate} onApply={applyWorkflowTemplate} /> : <div className="content"><div className="loading card"><p role="alert">Управление процессами доступно менеджерам и администраторам.</p></div></div>
-  else if (path === '/users') content = session.user.roles.includes('admin')
-    ? <UsersPage users={users} universities={universities} onCreate={createUser} onUpdate={updateUser} />
-    : <div className="content"><div className="loading card"><p role="alert">Раздел доступен только администраторам.</p></div></div>
+  else if (path === '/users') content = canManageContent
+    ? <UsersPage users={managerMode ? users.filter(user => user.role === 'user' || ((user.role === 'student' || user.role === 'teacher') && user.universityIds.some(id => universities.some(university => university.id === id)))) : users} universities={universities} managerMode={managerMode} onCreate={createUser} onUpdate={updateUser} onInvite={inviteUser} onRevokeInvite={revokeUserInvite} />
+    : <div className="content"><div className="loading card"><p role="alert">Раздел доступен менеджерам и администраторам.</p></div></div>
   else if (path === '/programs') content = <SectionPage section="programs" canCreate={canManageContent} programs={allPrograms} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else content = <div className="content"><div className="loading card">Раздел не найден.</div></div>
 

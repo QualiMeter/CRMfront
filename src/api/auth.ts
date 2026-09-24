@@ -32,6 +32,13 @@ interface AuthResponse {
   user: AuthUser
 }
 
+export interface InvitationInfo {
+  valid: boolean
+  email?: string
+  fullName?: string
+  expiresAt?: string
+}
+
 export const getSession = (): AuthSession | null => {
   try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') as AuthSession | null }
   catch { return null }
@@ -78,6 +85,24 @@ export async function login(username: string, password: string) {
 
 export async function register(input: { username: string; email: string; password: string; first_name: string; last_name: string }) {
   const session = toSession(await authRequest<AuthResponse>('/api/v1/auth/register', input))
+  saveSession(session)
+  return session
+}
+
+export async function validateInvitation(token: string): Promise<InvitationInfo> {
+  const response = await fetch(`${apiBase()}/api/v1/auth/invitations/${encodeURIComponent(token)}`)
+  const data = await response.json().catch(() => ({})) as Record<string, unknown>
+  if (!response.ok) throw new Error(String(data.detail || data.message || `Ошибка ${response.status}`))
+  return {
+    valid: data.valid === true,
+    email: typeof data.email === 'string' ? data.email : undefined,
+    fullName: typeof data.full_name === 'string' ? data.full_name : undefined,
+    expiresAt: typeof data.expires_at === 'string' ? data.expires_at : undefined,
+  }
+}
+
+export async function acceptInvitation(token: string, username: string, password: string) {
+  const session = toSession(await authRequest<AuthResponse>('/api/v1/auth/invitations/accept', { token, username, password }))
   saveSession(session)
   return session
 }
