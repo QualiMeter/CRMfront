@@ -14,6 +14,7 @@ import { DocumentsPage } from './pages/DocumentsPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ReportsPage } from './pages/ReportsPage'
 import { ImportPage } from './pages/ImportPage'
+import { IntegrationsPage } from './pages/IntegrationsPage'
 import { WorkflowsPage } from './pages/WorkflowsPage'
 import { UsersPage } from './pages/UsersPage'
 import { AuthPage } from './pages/AuthPage'
@@ -319,6 +320,7 @@ function App() {
   else if (path === '/documents') content = <DocumentsPage documents={documents} programs={allPrograms} universities={universities} onCreate={createDocument} onUpdate={updateDocument} onDelete={deleteDocument} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/analytics') content = <AnalyticsPage universities={universities} programs={allPrograms} tasks={tasks} documents={documents} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} onOpenTasks={() => navigate('/tasks')} onOpenDocuments={() => navigate('/documents')} />
   else if (path === '/reports') content = <ReportsPage universities={universities} programs={allPrograms} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
+  else if (path === '/integrations') content = canUseCrm ? <IntegrationsPage /> : <div className="content"><div className="loading card"><p role="alert">Интеграции доступны КАМам, руководителям и администраторам.</p></div></div>
   else if (path === '/import') content = canUseCrm ? <ImportPage universities={universities} onImportUniversities={importUniversities} onImportPrograms={importPrograms} /> : <div className="content"><div className="loading card"><p role="alert">Импорт доступен КАМам, руководителям и администраторам.</p></div></div>
   else if (path === '/workflows') content = canManageContent ? <WorkflowsPage templates={workflowTemplates} universities={universities} programs={allPrograms} onCreate={createWorkflowTemplate} onUpdate={updateWorkflowTemplate} onDelete={deleteWorkflowTemplate} onApply={applyWorkflowTemplate} /> : <div className="content"><div className="loading card"><p role="alert">Управление шаблонами процессов доступно руководителям и администраторам.</p></div></div>
   else if (path === '/users') content = canManageUsers
