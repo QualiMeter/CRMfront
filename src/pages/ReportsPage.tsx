@@ -45,7 +45,7 @@ export function ReportsPage({ universities, programs, onOpenUniversity }: Report
   const [message, setMessage] = useState('')
 
   const universityById = useMemo(() => new Map(universities.map(item => [item.id, item])), [universities])
-  const directions = useMemo(() => [...new Set(programs.map(item => item.name))].sort(), [programs])
+  const directions = useMemo(() => [...new Set(programs.map(item => item.direction || 'Не указано'))].sort(), [programs])
   const products = useMemo(() => [...new Set(programs.map(item => item.product))].sort(), [programs])
   const responsibles = useMemo(() => [...new Set(programs.map(item => currentStage(item.workflow)?.owner).filter((item): item is string => Boolean(item)))].sort(), [programs])
 
@@ -57,7 +57,7 @@ export function ReportsPage({ universities, programs, onOpenUniversity }: Report
       universityId: program.universityId,
       date: getDate(program),
       university: university?.name ?? '—',
-      direction: program.name,
+      direction: program.direction || 'Не указано',
       product: program.product,
       status: stage?.title ?? program.stage,
       responsible: stage?.owner ?? university?.contactPerson ?? 'Не назначен',
