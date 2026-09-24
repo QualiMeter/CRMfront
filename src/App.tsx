@@ -15,6 +15,7 @@ import { ProfilePage } from './pages/ProfilePage'
 import { ReportsPage } from './pages/ReportsPage'
 import { ImportPage } from './pages/ImportPage'
 import { IntegrationsPage } from './pages/IntegrationsPage'
+import { ApprovalsPage } from './pages/ApprovalsPage'
 import { WorkflowsPage } from './pages/WorkflowsPage'
 import { UsersPage } from './pages/UsersPage'
 import { AuthPage } from './pages/AuthPage'
@@ -28,6 +29,7 @@ import {
   TeacherStudentsPage,
 } from './pages/AcademicPortalPages'
 import { getSession, logout, refreshCurrentSession, syncCurrentUser, type AuthSession } from './api/auth'
+import { createApprovalId, loadWorkflowApprovals, saveWorkflowApprovals } from './domain/approvals'
 import type {
   CrmDocument,
   CrmTask,
@@ -39,6 +41,7 @@ import type {
   University,
   UniversityInput,
   WorkflowStageUpdate,
+  WorkflowApprovalRequest,
   WorkflowTemplate,
   WorkflowTemplateInput,
   CrmUser,
@@ -76,6 +79,7 @@ function App() {
   const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null)
   const [teacherProfile, setTeacherProfile] = useState<TeacherProfile | null>(null)
   const [students, setStudents] = useState<StudentProfile[]>([])
+  const [approvalRequests, setApprovalRequests] = useState<WorkflowApprovalRequest[]>(() => loadWorkflowApprovals())
   const url = new URL(location, window.location.origin)
   const path = url.pathname
   const programId = url.searchParams.has('program') ? Number(url.searchParams.get('program')) : null
@@ -193,12 +197,80 @@ function App() {
   const canManageUsers = activeRole === 'admin' || activeRole === 'leader'
   const leaderMode = activeRole === 'leader'
 
-  async function saveStage(programId: number, stageId: number, update: WorkflowStageUpdate) {
+  function changeApprovalRequests(update: (current: WorkflowApprovalRequest[]) => WorkflowApprovalRequest[]) {
+    setApprovalRequests(current => {
+      const next = update(current)
+      saveWorkflowApprovals(next)
+      return next
+    })
+  }
+
+  async function saveStage(programId: number, stageId: number, update: WorkflowStageUpdate): Promise<string | void> {
     if (!details) throw new Error('Откройте карточку вуза заново')
     const universityId = details.university.id
+    const program = details.programs.find(item => item.id === programId)
+    const stage = program?.workflow.find(item => item.id === stageId)
+    if (!program || !stage) throw new Error('Этап программы не найден')
+
+    if (activeRole !== 'admin' && update.status !== stage.status) {
+      const updated = await api.updateProgramStage(universityId, programId, stageId, { ...update, status: stage.status })
+      setDetails(current => current?.university.id === universityId ? updated : current)
+      setUniversities(current => current.map(university => university.id === universityId ? updated.university : university))
+      const request: WorkflowApprovalRequest = {
+        id: createApprovalId(),
+        universityId,
+        universityName: details.university.name,
+        programId,
+        programName: program.name,
+        stageId,
+        stageTitle: stage.title,
+        fromStatus: stage.status,
+        toStatus: update.status,
+        update,
+        requestedById: session.user.id,
+        requestedByName: session.user.full_name || session.user.username,
+        requestedAt: new Date().toISOString(),
+        status: 'pending',
+      }
+      changeApprovalRequests(current => [
+        request,
+        ...current.filter(item => !(item.status === 'pending' && item.stageId === stageId && item.requestedById === session.user.id)),
+      ])
+      return 'Данные этапа сохранены. Смена статуса отправлена администратору на согласование.'
+    }
+
     const updated = await api.updateProgramStage(universityId, programId, stageId, update)
     setDetails(current => current?.university.id === universityId ? updated : current)
     setUniversities(current => current.map(university => university.id === universityId ? updated.university : university))
+    return activeRole === 'admin' && update.status !== stage.status ? 'Статус изменён с подтверждением администратора.' : undefined
+  }
+
+  async function approveWorkflowRequest(id: string, reviewComment?: string) {
+    if (activeRole !== 'admin') throw new Error('Подтверждать смену статуса может только администратор')
+    const request = approvalRequests.find(item => item.id === id && item.status === 'pending')
+    if (!request) throw new Error('Запрос уже обработан или не найден')
+    await api.updateProgramStage(request.universityId, request.programId, request.stageId, request.update)
+    changeApprovalRequests(current => current.map(item => item.id === id ? {
+      ...item,
+      status: 'approved',
+      reviewedByName: session.user.full_name || session.user.username,
+      reviewedAt: new Date().toISOString(),
+      reviewComment,
+    } : item))
+    setUniversities(await api.getUniversities())
+  }
+
+  async function rejectWorkflowRequest(id: string, reviewComment?: string) {
+    if (activeRole !== 'admin') throw new Error('Отклонять смену статуса может только администратор')
+    const request = approvalRequests.find(item => item.id === id && item.status === 'pending')
+    if (!request) throw new Error('Запрос уже обработан или не найден')
+    changeApprovalRequests(current => current.map(item => item.id === id ? {
+      ...item,
+      status: 'rejected',
+      reviewedByName: session.user.full_name || session.user.username,
+      reviewedAt: new Date().toISOString(),
+      reviewComment,
+    } : item))
   }
 
   async function uploadStageAttachment(programId: number, stageId: number, file: File) {
@@ -315,12 +387,13 @@ function App() {
   else if (path === '/') content = <OverviewPage universities={universities} programs={allPrograms} activities={allActivities} tasks={tasks} onOpenUniversity={id => navigate(`/universities/${id}`)} onOpenUniversities={() => navigate('/universities')} onOpenPrograms={() => navigate('/programs')} onOpenTasks={() => navigate('/tasks')} onOpenAnalytics={() => navigate('/analytics')} />
   else if (path === '/profile') content = <ProfilePage currentUser={session.user} onOpenSettings={() => setSettingsSignal(value => value + 1)} />
   else if (path === '/universities') content = <UniversitiesPage universities={universities} canCreate={canUseCrm} initialQuery={url.searchParams.get('search') ?? ''} onCreate={createUniversity} onOpen={id => navigate(`/universities/${id}`)} />
-  else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onUploadStageAttachment={uploadStageAttachment} onDeleteStageAttachment={deleteStageAttachment} onCreateTask={createTask} onUpdateTask={updateTask} onOpenPrograms={() => navigate('/programs')} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
+  else if (path.startsWith('/universities/')) content = details ? <UniversityDetailsPage key={details.university.id} data={details} universities={universities} programId={programId} onSwitch={id => navigate(`/universities/${id}`)} onSelectProgram={id => navigate(`${path}?program=${id}`)} onSaveStage={saveStage} onUploadStageAttachment={uploadStageAttachment} onDeleteStageAttachment={deleteStageAttachment} onCreateTask={createTask} onUpdateTask={updateTask} onOpenPrograms={() => navigate('/programs')} requiresStatusApproval={activeRole !== 'admin'} /> : <div className="content"><div className="loading card">Вуз не найден.</div></div>
   else if (path === '/tasks') content = <div className="content"><div className="page-heading"><div><div className="eyebrow">РАБОЧИЙ ЦЕНТР</div><h1>Задачи</h1><p className="muted">Поручения по всем учебным заведениям и программам</p></div></div><TasksPanel tasks={tasks} universities={universities} programs={allPrograms} onCreate={createTask} onUpdate={updateTask} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /></div>
   else if (path === '/documents') content = <DocumentsPage documents={documents} programs={allPrograms} universities={universities} onCreate={createDocument} onUpdate={updateDocument} onDelete={deleteDocument} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/analytics') content = <AnalyticsPage universities={universities} programs={allPrograms} tasks={tasks} documents={documents} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} onOpenTasks={() => navigate('/tasks')} onOpenDocuments={() => navigate('/documents')} />
   else if (path === '/reports') content = <ReportsPage universities={universities} programs={allPrograms} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else if (path === '/integrations') content = canUseCrm ? <IntegrationsPage /> : <div className="content"><div className="loading card"><p role="alert">Интеграции доступны КАМам, руководителям и администраторам.</p></div></div>
+  else if (path === '/approvals') content = canUseCrm ? <ApprovalsPage requests={activeRole === 'manager' ? approvalRequests.filter(item => item.requestedById === session.user.id) : approvalRequests} canReview={activeRole === 'admin'} currentUserName={session.user.full_name || session.user.username} onApprove={approveWorkflowRequest} onReject={rejectWorkflowRequest} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} /> : <div className="content"><div className="loading card"><p role="alert">Согласования доступны пользователям CRM.</p></div></div>
   else if (path === '/import') content = canUseCrm ? <ImportPage universities={universities} onImportUniversities={importUniversities} onImportPrograms={importPrograms} /> : <div className="content"><div className="loading card"><p role="alert">Импорт доступен КАМам, руководителям и администраторам.</p></div></div>
   else if (path === '/workflows') content = canManageContent ? <WorkflowsPage templates={workflowTemplates} universities={universities} programs={allPrograms} onCreate={createWorkflowTemplate} onUpdate={updateWorkflowTemplate} onDelete={deleteWorkflowTemplate} onApply={applyWorkflowTemplate} /> : <div className="content"><div className="loading card"><p role="alert">Управление шаблонами процессов доступно руководителям и администраторам.</p></div></div>
   else if (path === '/users') content = canManageUsers
@@ -329,7 +402,11 @@ function App() {
   else if (path === '/programs') content = <SectionPage section="programs" canCreate={canUseCrm} programs={allPrograms} universities={universities} onCreateProgram={createProgram} onOpenUniversity={(id, selectedProgramId) => navigate(`/universities/${id}${selectedProgramId ? `?program=${selectedProgramId}` : ''}`)} />
   else content = <div className="content"><div className="loading card">Раздел не найден.</div></div>
 
-  return <AppShell currentUser={session.user} onLogout={async () => { await logout(); setSession(null) }} settingsSignal={settingsSignal} taskCount={tasks.filter(task => task.status === 'open').length} path={path} navigate={navigate}>{content}</AppShell>
+  const visibleApprovalCount = activeRole === 'manager'
+    ? approvalRequests.filter(item => item.status === 'pending' && item.requestedById === session.user.id).length
+    : approvalRequests.filter(item => item.status === 'pending').length
+
+  return <AppShell currentUser={session.user} onLogout={async () => { await logout(); setSession(null) }} settingsSignal={settingsSignal} taskCount={tasks.filter(task => task.status === 'open').length} approvalCount={visibleApprovalCount} path={path} navigate={navigate}>{content}</AppShell>
 }
 
 export default App
