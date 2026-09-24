@@ -3,9 +3,10 @@ import { Icon } from './Icon'
 import { currentStage, stageStatusLabels, workflowProgress } from '../domain/workflow'
 import type { Program, WorkflowStage, WorkflowStageUpdate } from '../types/domain'
 
-export function ProgramWorkflow({ program, onSave, onUpload, onDeleteAttachment, requiresStatusApproval = false }: {
+export function ProgramWorkflow({ program, onSave, onRollback, onUpload, onDeleteAttachment, requiresStatusApproval = false }: {
   program: Program
   onSave: (stageId: number, update: WorkflowStageUpdate) => Promise<string | void>
+  onRollback: (stageId: number) => Promise<string | void>
   onUpload: (stageId: number, file: File) => Promise<void>
   onDeleteAttachment: (stageId: number, attachmentId: string) => Promise<void>
   requiresStatusApproval?: boolean
@@ -14,6 +15,9 @@ export function ProgramWorkflow({ program, onSave, onUpload, onDeleteAttachment,
   const [saving, setSaving] = useState(false)
   const statusLabels = { ...stageStatusLabels, ...program.statusLabels }
   const selected = program.workflow.find(stage => stage.id === selectedId) ?? currentStage(program.workflow)
+  const active = currentStage(program.workflow)
+  const previousStage = active ? [...program.workflow].filter(stage => stage.order < active.order).sort((a, b) => b.order - a.order)[0] : undefined
+  const selectedBranches = selected ? (program.branchRules ?? []).filter(branch => branch.fromOrder === selected.order) : []
   const done = program.workflow.filter(stage => stage.status === 'done').length
   if (!selected) return <section className="card empty-state">У программы пока нет этапов.</section>
 
@@ -27,7 +31,10 @@ export function ProgramWorkflow({ program, onSave, onUpload, onDeleteAttachment,
         <span className="stage-copy"><strong>{stage.shortTitle}</strong><span>{statusLabels[stage.status]}</span></span>
       </button>)}</div>
     </section>
-    <StageEditor key={selected.id} stage={selected} statusLabels={statusLabels} requiresStatusApproval={requiresStatusApproval} onUpload={file => onUpload(selected.id, file)} onDeleteAttachment={attachmentId => onDeleteAttachment(selected.id, attachmentId)} onSave={async update => {
+    <StageEditor key={selected.id} stage={selected} previousStage={selected.id === active?.id ? previousStage : undefined} branches={selectedBranches.map(branch => ({ ...branch, target: program.workflow.find(stage => stage.order === branch.toOrder) }))} statusLabels={statusLabels} requiresStatusApproval={requiresStatusApproval} onRollback={async () => {
+      setSaving(true)
+      try { return await onRollback(selected.id) } finally { setSaving(false) }
+    }} onUpload={file => onUpload(selected.id, file)} onDeleteAttachment={attachmentId => onDeleteAttachment(selected.id, attachmentId)} onSave={async update => {
       setSaving(true)
       try { return await onSave(selected.id, update) } finally { setSaving(false) }
     }} />
@@ -40,10 +47,13 @@ function formatFileSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} МБ`
 }
 
-function StageEditor({ stage, statusLabels, onSave, onUpload, onDeleteAttachment, requiresStatusApproval }: {
+function StageEditor({ stage, previousStage, branches, statusLabels, onSave, onRollback, onUpload, onDeleteAttachment, requiresStatusApproval }: {
   stage: WorkflowStage
+  previousStage?: WorkflowStage
+  branches: Array<{ fromOrder: number; toOrder: number; label: string; target?: WorkflowStage }>
   statusLabels: Record<WorkflowStage['status'], string>
   onSave: (update: WorkflowStageUpdate) => Promise<string | void>
+  onRollback: () => Promise<string | void>
   onUpload: (file: File) => Promise<void>
   onDeleteAttachment: (attachmentId: string) => Promise<void>
   requiresStatusApproval: boolean
@@ -72,6 +82,21 @@ function StageEditor({ stage, statusLabels, onSave, onUpload, onDeleteAttachment
       setError(error instanceof Error ? error.message : 'Не удалось сохранить изменения. Попробуйте ещё раз.')
     } finally { setSaving(false) }
   }
+  async function rollback() {
+    if (!previousStage || saving) return
+    if (!window.confirm(`Вернуть процесс с этапа «${stage.title}» на предыдущий этап «${previousStage.title}»?`)) return
+    setSaving(true)
+    setMessage('')
+    setError('')
+    try {
+      const result = await onRollback()
+      setMessage(result || 'Процесс возвращён на предыдущий этап')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не удалось вернуть процесс на предыдущий этап')
+    } finally {
+      setSaving(false)
+    }
+  }
   async function upload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -97,8 +122,9 @@ function StageEditor({ stage, statusLabels, onSave, onUpload, onDeleteAttachment
         <label>Ответственный<input maxLength={120} value={draft.owner} onChange={event => change({ owner: event.target.value })} placeholder="Фамилия и инициалы" /></label>
         <label>Дата начала<input type="date" value={draft.date} onChange={event => change({ date: event.target.value })} /></label>
         <label>Комментарий<textarea maxLength={2000} rows={3} value={draft.note} onChange={event => change({ note: event.target.value })} placeholder="Результат этапа или следующий шаг" /></label>
-        <button className="primary-button" type="submit">{saving ? 'Сохранение…' : requiresStatusApproval && draft.status !== stage.status ? 'Отправить на согласование' : 'Сохранить этап'}</button>
+        <div className="stage-editor-actions"><button className="primary-button" type="submit">{saving ? 'Сохранение…' : requiresStatusApproval && draft.status !== stage.status ? 'Отправить на согласование' : 'Сохранить этап'}</button>{previousStage && <button className="outline-button" type="button" disabled={saving} onClick={() => void rollback()}>← Вернуть на этап {previousStage.order}</button>}</div>
       </fieldset>
+      {branches.length > 0 && <div className="stage-branch-preview"><div><strong>Возможные ветвления</strong><span>Маршруты уже сохранены в шаблоне; исполнение подключим к backend transition API.</span></div>{branches.map((branch, index) => <article key={index}><span>{branch.label}</span><b>→</b><strong>{branch.target ? `${branch.target.order}. ${branch.target.shortTitle}` : `Этап ${branch.toOrder}`}</strong></article>)}</div>}
       <div className="stage-attachments">
         <div className="stage-attachments-heading"><div><strong>Вложения этапа</strong><span>{stage.attachments?.length ?? 0} файлов</span></div><button type="button" className="stage-upload-button" disabled={uploading} onClick={() => fileInput.current?.click()}><Icon name="plus" size={15} />{uploading ? 'Загрузка…' : 'Прикрепить'}</button></div>
         <input ref={fileInput} className="visually-hidden" type="file" accept=".png,.jpg,.jpeg,.pdf,.zip,.gz,.gzip,.rar,.doc,.docx,.xls,.xlsx" onChange={upload} />
@@ -107,7 +133,7 @@ function StageEditor({ stage, statusLabels, onSave, onUpload, onDeleteAttachment
       </div>
       <p className="save-message" role="status">{message}</p>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <p className="demo-note">{requiresStatusApproval ? 'Комментарии, ответственный и дата сохраняются сразу. Смена статуса вступит в силу только после подтверждения администратора.' : 'Администратор может подтвердить изменение статуса непосредственно.'}</p>
+      <p className="demo-note">{requiresStatusApproval ? 'Комментарии, ответственный и дата сохраняются сразу. Смена статуса и возврат на предыдущий этап вступают в силу только после подтверждения администратора.' : 'Администратор может подтверждать смену статуса и выполнять возврат на предыдущий этап непосредственно.'}</p>
     </form>
   </section>
 }
