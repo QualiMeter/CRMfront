@@ -113,6 +113,25 @@ export function ReportsPage({ universities, programs, onOpenUniversity }: Report
     setMessage(`XLSX сформирован: ${rows.length} строк.`)
   }
 
+  async function exportXls() {
+    if (!rows.length || !activeColumns.length) return setMessage('Нет данных или не выбраны колонки для выгрузки.')
+    setMessage('Формируем XLS…')
+    const XLSX = await import('@e965/xlsx')
+    const values = [activeColumns.map(column => column.label), ...reportData.map(row => activeColumns.map(column => row[column.label]))]
+    const sheet = XLSX.utils.aoa_to_sheet(values)
+    sheet['!cols'] = activeColumns.map(column => ({ wch: Math.max(16, column.label.length + 3) }))
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Отчет')
+    const binary = XLSX.write(workbook, { type: 'array', bookType: 'biff8' })
+    const url = URL.createObjectURL(new Blob([binary], { type: 'application/vnd.ms-excel' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `rtk-crm-report-${new Date().toISOString().slice(0, 10)}.xls`
+    link.click()
+    URL.revokeObjectURL(url)
+    setMessage(`XLS сформирован: ${rows.length} строк.`)
+  }
+
   async function exportPdf() {
     if (!rows.length || !activeColumns.length) return setMessage('Нет данных или не выбраны колонки для выгрузки.')
     setMessage('Формируем PDF…')
@@ -140,7 +159,7 @@ export function ReportsPage({ universities, programs, onOpenUniversity }: Report
   function resetFilters() { setUniversityId('all'); setDirection('all'); setProduct('all'); setResponsible('all'); setDateFrom(''); setDateTo(''); setMessage('') }
 
   return <div className="content reports-workspace">
-    <div className="page-heading reports-heading"><div><div className="eyebrow">ОТЧЕТНОСТЬ</div><h1>Отчеты</h1><p className="muted">Настройте срез данных и выгрузите отчет в XLSX или PDF</p></div><div className="reports-actions"><button className="outline-button reports-button" onClick={exportPdf}>Скачать PDF</button><button className="primary-button" onClick={exportXlsx}>Скачать XLSX</button></div></div>
+    <div className="page-heading reports-heading"><div><div className="eyebrow">ОТЧЕТНОСТЬ</div><h1>Отчеты</h1><p className="muted">Настройте срез данных и выгрузите отчет в XLS, XLSX или PDF</p></div><div className="reports-actions"><button className="outline-button reports-button" onClick={exportPdf}>Скачать PDF</button><button className="outline-button reports-button" onClick={exportXls}>Скачать XLS</button><button className="primary-button" onClick={exportXlsx}>Скачать XLSX</button></div></div>
 
     <section className="card reports-filter-card">
       <div className="card-header"><div><h2>Параметры отчета</h2><p>Все фильтры применяются к таблице и экспортируемому файлу</p></div><button className="ghost-button" onClick={resetFilters}>Сбросить</button></div>
