@@ -121,6 +121,13 @@ function refreshOnce(current: AuthSession) {
   return refreshPromise
 }
 
+export async function refreshCurrentSession() {
+  const current = getSession()
+  if (!current) return null
+  await refreshOnce(current)
+  return syncCurrentUser()
+}
+
 export async function authorizedFetch(url: string, init: RequestInit = {}, retry = true): Promise<Response> {
   let session = getSession()
   if (!session) throw new Error('Требуется авторизация')

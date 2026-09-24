@@ -15,7 +15,17 @@ type Navigate = (path: string) => void
 
 const valueOrDash = (value?: string | number) => value ?? 'Не указано'
 
-export function PendingRolePage({ user }: { user: AuthUser }) {
+export function PendingRolePage({ user, onCheckRole }: { user: AuthUser; onCheckRole: () => Promise<boolean> }) {
+  const [checking, setChecking] = useState(false)
+  const [checkMessage, setCheckMessage] = useState('')
+  async function checkRole() {
+    setChecking(true); setCheckMessage('')
+    try {
+      const assigned = await onCheckRole()
+      if (!assigned) setCheckMessage('Роль пока не назначена. Страница также проверяет изменения автоматически.')
+    } catch (error) { setCheckMessage(error instanceof Error ? error.message : 'Не удалось проверить назначение') }
+    finally { setChecking(false) }
+  }
   return <div className="content portal-page pending-role-page">
     <section className="portal-hero pending-role-hero">
       <div><div className="eyebrow">ПРОФИЛЬ СОЗДАН</div><h1>Добро пожаловать, {user.full_name || user.username}</h1><p>Аккаунт активен, но учебная роль ещё не назначена.</p></div>
@@ -25,6 +35,8 @@ export function PendingRolePage({ user }: { user: AuthUser }) {
       <div className="pending-role-icon"><Icon name="clock" size={28} /></div>
       <div><h2>Что произойдёт дальше</h2><p>Менеджер вашего учебного заведения назначит роль студента или преподавателя и укажет доступный вуз. После этого здесь автоматически появится персональный кабинет.</p></div>
       <ol><li><span>1</span>Регистрация завершена</li><li><span>2</span>Менеджер назначает роль</li><li><span>3</span>Открывается учебный кабинет</li></ol>
+      <div className="pending-role-actions"><button className="primary-button" disabled={checking} onClick={() => void checkRole()}><Icon name="refresh" size={16} /> {checking ? 'Проверяем…' : 'Проверить назначение'}</button><small>При смене роли кабинет откроется автоматически — повторный вход не нужен.</small></div>
+      {checkMessage && <p className="pending-check-message" role="status">{checkMessage}</p>}
       <div className="pending-contact"><span>Учётная запись</span><strong>{user.email}</strong></div>
     </section>
   </div>

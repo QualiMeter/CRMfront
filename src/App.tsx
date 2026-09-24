@@ -26,7 +26,7 @@ import {
   TeacherOverviewPage,
   TeacherStudentsPage,
 } from './pages/AcademicPortalPages'
-import { getSession, logout, syncCurrentUser, type AuthSession } from './api/auth'
+import { getSession, logout, refreshCurrentSession, syncCurrentUser, type AuthSession } from './api/auth'
 import type {
   CrmDocument,
   CrmTask,
@@ -93,6 +93,14 @@ function App() {
     if (!session) return
     void syncCurrentUser().catch(() => undefined)
   }, [session?.accessToken])
+
+  useEffect(() => {
+    if (!session || primaryRole(session.user.roles) !== 'user') return
+    const checkRole = () => { if (document.visibilityState === 'visible') void refreshCurrentSession().catch(() => undefined) }
+    const interval = window.setInterval(checkRole, 30_000)
+    window.addEventListener('focus', checkRole)
+    return () => { window.clearInterval(interval); window.removeEventListener('focus', checkRole) }
+  }, [session?.user.id, session?.user.roles])
 
   useEffect(() => {
     if (!session) return
@@ -281,7 +289,7 @@ function App() {
   let content: ReactNode
   if (loading) content = <div className="content"><div className="loading card" role="status">Загрузка данных…</div></div>
   else if (error) content = <div className="content"><div className="loading card"><p role="alert">{error}</p><button className="outline-button" onClick={() => setRetry(value => value + 1)}>Повторить загрузку</button></div></div>
-  else if (activeRole === 'user') content = path === '/profile' ? <ProfilePage currentUser={session.user} onOpenSettings={() => setSettingsSignal(value => value + 1)} /> : <PendingRolePage user={session.user} />
+  else if (activeRole === 'user') content = path === '/profile' ? <ProfilePage currentUser={session.user} onOpenSettings={() => setSettingsSignal(value => value + 1)} /> : <PendingRolePage user={session.user} onCheckRole={async () => primaryRole((await refreshCurrentSession())?.user.roles ?? []) !== 'user'} />
   else if (activeRole === 'student' && studentProfile) {
     const ownUniversity = universities.find(item => item.id === studentProfile.universityId)
     const ownProgram = allPrograms.find(item => item.id === studentProfile.programId)
