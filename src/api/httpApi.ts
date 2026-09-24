@@ -18,6 +18,7 @@ import type {
   WorkflowStage,
   WorkflowStageUpdate,
   WorkflowTemplate,
+  WorkflowBranchRule,
   CrmUser,
   CrmUserInput,
   CrmUserUpdate,
@@ -88,18 +89,52 @@ const documentStatusFromApi = (value: unknown): DocumentStatus => {
 
 const documentStatusToApi = (value: DocumentStatus) => value === 'review' ? 'approval' : value
 const defaultStatusLabels: Record<StageStatus, string> = { done: 'Выполнено', active: 'В процессе', pending: 'Предстоит', blocked: 'Требует внимания' }
-const statusMarker = /\n\[crm-status-labels:([^\]]+)\]$/
+const legacyStatusMarker = /\n\[crm-status-labels:([^\]]+)\]$/
+const templateMetaMarker = /\n\[crm-template-meta:([^\]]+)\]$/
 
-function encodeTemplateDescription(description: string, labels: Record<StageStatus, string>) {
-  return `${description.trim()}\n[crm-status-labels:${encodeURIComponent(JSON.stringify(labels))}]`
+function normalizeBranches(value: unknown): WorkflowBranchRule[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap(item => {
+    if (!item || typeof item !== 'object') return []
+    const row = item as Record<string, unknown>
+    const fromOrder = number(row.fromOrder)
+    const toOrder = number(row.toOrder)
+    const label = text(row.label).trim()
+    return fromOrder > 0 && toOrder > 0 && label ? [{ fromOrder, toOrder, label }] : []
+  })
+}
+
+function encodeTemplateDescription(description: string, labels: Record<StageStatus, string>, branches: WorkflowBranchRule[] = []) {
+  const metadata = { labels, branches }
+  return `${description.trim()}\n[crm-template-meta:${encodeURIComponent(JSON.stringify(metadata))}]`
 }
 
 function decodeTemplateDescription(value: unknown) {
   const raw = text(value)
-  const match = raw.match(statusMarker)
-  if (!match) return { description: raw, labels: defaultStatusLabels }
-  try { return { description: raw.replace(statusMarker, ''), labels: { ...defaultStatusLabels, ...JSON.parse(decodeURIComponent(match[1])) } } }
-  catch { return { description: raw.replace(statusMarker, ''), labels: defaultStatusLabels } }
+  const metaMatch = raw.match(templateMetaMarker)
+  if (metaMatch) {
+    try {
+      const metadata = JSON.parse(decodeURIComponent(metaMatch[1])) as { labels?: Partial<Record<StageStatus, string>>; branches?: unknown }
+      return {
+        description: raw.replace(templateMetaMarker, ''),
+        labels: { ...defaultStatusLabels, ...(metadata.labels ?? {}) },
+        branches: normalizeBranches(metadata.branches),
+      }
+    } catch {
+      return { description: raw.replace(templateMetaMarker, ''), labels: defaultStatusLabels, branches: [] }
+    }
+  }
+  const legacyMatch = raw.match(legacyStatusMarker)
+  if (!legacyMatch) return { description: raw, labels: defaultStatusLabels, branches: [] }
+  try {
+    return {
+      description: raw.replace(legacyStatusMarker, ''),
+      labels: { ...defaultStatusLabels, ...JSON.parse(decodeURIComponent(legacyMatch[1])) },
+      branches: [],
+    }
+  } catch {
+    return { description: raw.replace(legacyStatusMarker, ''), labels: defaultStatusLabels, branches: [] }
+  }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -254,7 +289,7 @@ async function loadStageNotes(stageIds: number[]) {
 }
 
 async function buildPrograms(universityId: number, rows: Row[], interactions: Row[], users: Row[]): Promise<Program[]> {
-  const [products, links, directions] = await Promise.all([optionalTable('it_products'), optionalTable('program_products'), optionalTable('it_directions')])
+  const [products, links, directions, templates] = await Promise.all([optionalTable('it_products'), optionalTable('program_products'), optionalTable('it_directions'), optionalTable('workflow_templates')])
   return Promise.all(rows.map(async row => {
     const programId = number(row.id)
     const interaction = interactions.find(item => number(item.program_id) === programId)
@@ -274,6 +309,8 @@ async function buildPrograms(universityId: number, rows: Row[], interactions: Ro
     const currentStage = workflow.find(stage => stage.status === 'active')
       ?? workflow.find(stage => stage.status !== 'done')
     const direction = directions.find(item => number(item.id) === number(row.direction_id))
+    const template = templates.find(item => number(item.id) === number(interaction?.template_id))
+    const templateMetadata = decodeTemplateDescription(template?.description)
     return {
       id: programId,
       universityId,
@@ -287,6 +324,8 @@ async function buildPrograms(universityId: number, rows: Row[], interactions: Ro
       demand: number(row.demand_score),
       stage: currentStage?.title ?? (workflow.length ? 'Все этапы завершены' : 'Workflow не создан'),
       workflow,
+      branchRules: templateMetadata.branches,
+      statusLabels: templateMetadata.labels,
     }
   }))
 }
@@ -514,6 +553,7 @@ async function remoteWorkflowTemplates(): Promise<WorkflowTemplate[]> {
     stages: stages.filter(stage => number(stage.template_id) === number(template.id))
       .sort((a, b) => number(a.position) - number(b.position))
       .map(stage => ({ id: number(stage.id), order: number(stage.position), title: text(stage.name, 'Этап'), shortTitle: text(stage.code, text(stage.name, 'Этап')) })),
+    branches: decoded.branches,
     statusLabels: decoded.labels,
   }})
 }
@@ -576,14 +616,14 @@ export const httpApi: ApiClient = {
 
   async getWorkflowTemplates() { return remoteWorkflowTemplates() },
   async createWorkflowTemplate(input) {
-    const row = await createRow<Row>('workflow_templates', { name: input.name, description: encodeTemplateDescription(input.description, input.statusLabels), is_default: false, is_active: true, version: 1, created_by: getSession()?.user.id ?? null })
+    const row = await createRow<Row>('workflow_templates', { name: input.name, description: encodeTemplateDescription(input.description, input.statusLabels, input.branches), is_default: false, is_active: true, version: 1, created_by: getSession()?.user.id ?? null })
     await Promise.all(input.stages.map((stage, index) => createRow('workflow_template_stages', {
       template_id: number(row.id), position: index + 1, code: stage.shortTitle, name: stage.title, is_optional: false,
     })))
     return (await remoteWorkflowTemplates()).find(item => item.id === number(row.id))!
   },
   async updateWorkflowTemplate(id, input) {
-    await patchRow('workflow_templates', id, { name: input.name, description: encodeTemplateDescription(input.description, input.statusLabels) })
+    await patchRow('workflow_templates', id, { name: input.name, description: encodeTemplateDescription(input.description, input.statusLabels, input.branches) })
     const currentStages = (await table('workflow_template_stages')).filter(stage => number(stage.template_id) === id).sort((a, b) => number(a.position) - number(b.position))
     await Promise.all(input.stages.map((stage, index) => currentStages[index]
       ? patchRow('workflow_template_stages', number(currentStages[index].id), { position: index + 1, code: stage.shortTitle, name: stage.title })
