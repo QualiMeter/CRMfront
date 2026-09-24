@@ -15,6 +15,7 @@ export function ApprovalsPage({ requests, canReview, currentUserName, onApprove,
   const [filter, setFilter] = useState<'pending' | 'all'>('pending')
   const [busyId, setBusyId] = useState<string | null>(null)
   const [comment, setComment] = useState<Record<string, string>>({})
+  const [error, setError] = useState('')
   const visible = useMemo(() => requests
     .filter(item => filter === 'all' || item.status === 'pending')
     .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)), [requests, filter])
@@ -23,9 +24,12 @@ export function ApprovalsPage({ requests, canReview, currentUserName, onApprove,
   async function act(id: string, action: 'approve' | 'reject') {
     if (busyId) return
     setBusyId(id)
+    setError('')
     try {
       if (action === 'approve') await onApprove(id, comment[id]?.trim() || undefined)
       else await onReject(id, comment[id]?.trim() || undefined)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не удалось обработать запрос')
     } finally {
       setBusyId(null)
     }
@@ -33,7 +37,7 @@ export function ApprovalsPage({ requests, canReview, currentUserName, onApprove,
 
   return <div className="content approvals-page">
     <div className="page-heading">
-      <div><div className="eyebrow">КОНТРОЛЬ ИЗМЕНЕНИЙ WORKFLOW</div><h1>Согласования</h1><p className="muted">Изменение статуса этапа КАМом сначала отправляется на подтверждение администратора.</p></div>
+      <div><div className="eyebrow">КОНТРОЛЬ ИЗМЕНЕНИЙ WORKFLOW</div><h1>Согласования</h1><p className="muted">Изменение статуса этапа пользователем CRM сначала отправляется на подтверждение администратора.</p></div>
       <div className="approval-heading-stat"><strong>{pending}</strong><span>ожидают решения</span></div>
     </div>
 
@@ -48,6 +52,7 @@ export function ApprovalsPage({ requests, canReview, currentUserName, onApprove,
       {!canReview && <span>Решение принимает администратор</span>}
     </div>
 
+    {error && <p className="users-feedback error" role="alert">{error}</p>}
     <div className="approval-list">
       {visible.map(item => <article className="card approval-card" key={item.id}>
         <div className="approval-card-top">
